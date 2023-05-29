@@ -195,6 +195,8 @@ def add_objective(instance):
         return m.alpha * sum(
             (m.x[1, i] - m.x1_ref) ** 2 for i in m.t if i != 1
         ) + m.rho * sum((m.u1[i] - m.u1_ref) ** 2 for i in m.t if i != 1)
+    instance.REDUCED_SPACE_OBJ = pyo.Objective(rule=rs_obj_rule)
+    instance.OBJ.deactivate()
 
 
 def create_instance():
