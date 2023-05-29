@@ -12,7 +12,7 @@ organization and testing. It can be installed with:
 ```bash
 $ python setup.py develop
 ```
-Then functionality can be imported in Python:
+Then functionality can be imported in Python from the `svi` package:
 ```python
 from svi.distill import create_instance
 model = create_instance()
