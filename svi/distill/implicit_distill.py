@@ -30,8 +30,11 @@ from svi.distill import create_instance
 
 
 def setup_implicit(instance, **kwds):
-    """
+    """Return a Pyomo model where algebraic equations and variables haver been
+    eliminated using an implicit function.
+
     Keyword arguments are sent straight to ExternalPyomoModel
+
     """
 
     diff_vars = [pyo.Reference(instance.x[i, :]) for i in instance.S_TRAYS]
@@ -63,8 +66,10 @@ def setup_implicit(instance, **kwds):
 
     input_vars = [pyo.Reference(instance.u1[:])]
 
+    #
     # Create a block to hold the reduced space model
-    reduced_space = pyo.Block(concrete=True)
+    #
+    reduced_space = pyo.ConcreteModel()
     reduced_space.obj = pyo.Reference(instance.REDUCED_SPACE_OBJ)
 
     n_input = len(input_vars)
@@ -77,6 +82,12 @@ def setup_implicit(instance, **kwds):
     def input_block_rule(b, i):
         b.var = input_vars[i]
 
+    #
+    # Add differential variables and equations to the reduced space model.
+    # Any constraints that do not contain an "implicit variable" (one that we
+    # solve for with our implicit function) can be added to the reduced space
+    # model directly.
+    #
     reduced_space.differential_block = pyo.Block(
         range(n_diff),
         rule=differential_block_rule,
@@ -86,6 +97,15 @@ def setup_implicit(instance, **kwds):
         rule=input_block_rule,
     )
 
+    #
+    # Construct an ExternalGreyBoxBlock. This allows us to add equality
+    # constraints to the model that are not defined explicitly. Instead,
+    # they will be defined implicitly via an ExternalPyomoModel.
+    #
+    # ExternalGreyBoxBlock is just a special type of Pyomo Block. It holds
+    # the variables that are inputs to or outputs from the external model,
+    # and facilitates communication with solvers (CyIpopt).
+    #
     reduced_space.external_block = ExternalGreyBoxBlock(instance.t)
 
     # Add reference to the constraint that specifies the initial conditions
@@ -104,12 +124,33 @@ def setup_implicit(instance, **kwds):
         external_vars = [v[t] for v in alg_vars]
         residual_cons = [c[t] for c in diff_eqns]
         external_cons = [c[t] for c in alg_eqns]
+
+        # This is how we add the ExternalPyomoModel to the ExternalGreyBoxBlock
         reduced_space.external_block[t].set_external_model(
+            #
+            # Construct an ExternalPyomoModel. This object accepts the inputs
+            # specified (in the `inputs` arg) and is in charge of evaluating
+            # equality constraints and their derivatives
+            #
             ExternalPyomoModel(
+                # Arguments are:
+
+                # "Input variables"
                 reduced_space_vars,
+
+                # Variables that we eliminate by solving implicitly
                 external_vars,
+
+                # Constraints (equations) that will be exposed to the solver from
+                # the ExternalPyomoModel. These are all constraints that *are not*
+                # used to define the external vars, but that *do* contain some of
+                # the external variables.
                 residual_cons,
+
+                # Equations that define the external variables (with input
+                # variables specified)
                 external_cons,
+
                 **kwds,
             ),
             inputs=reduced_space_vars,
