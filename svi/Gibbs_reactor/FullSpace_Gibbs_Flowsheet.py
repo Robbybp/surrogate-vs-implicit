@@ -62,7 +62,7 @@ from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 
-def FullSpace_Gibbs_Flowsheet():
+def FullSpace_Gibbs_Flowsheet(conversion):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
 
@@ -129,7 +129,7 @@ def FullSpace_Gibbs_Flowsheet():
     m.fs.H2O.outlet.temperature.fix(373.15 * pyunits.K)
     m.fs.H2O.outlet.pressure.fix(1e5 * pyunits.Pa)
 
-    m.fs.C101.efficiency_isentropic.fix(0.90)
+    m.fs.C101.efficiency_isentropic.fix(0.90) #
 
     m.fs.R101.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
 
@@ -165,7 +165,7 @@ def FullSpace_Gibbs_Flowsheet():
     m.fs.PROD.initialize()
 
     m.fs.objective = Objective(expr=m.fs.operating_cost)
-    m.fs.R101.conversion.fix(0.90)
+    m.fs.R101.conversion.fix(conversion)
     m.fs.C101.outlet.pressure.unfix()
     m.fs.C101.outlet.pressure[0].setlb(pyunits.convert(1 * pyunits.bar, to_units=pyunits.Pa))  # equals inlet pressure
     m.fs.C101.outlet.pressure[0].setlb(pyunits.convert(10 * pyunits.bar, to_units=pyunits.Pa))  # at most, pressurize to 1 bar
@@ -178,7 +178,7 @@ def FullSpace_Gibbs_Flowsheet():
     return m
 
 def main():
-    m = FullSpace_Gibbs_Flowsheet()
+    m = FullSpace_Gibbs_Flowsheet(conversion = 0.9)
     solver = get_solver()
     solver.solve(m, tee=True)
 
