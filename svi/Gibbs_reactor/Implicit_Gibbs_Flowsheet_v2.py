@@ -261,8 +261,8 @@ m_implicit.conv_constraint = Constraint(
     )
 )
 
-# m_implicit.input_vars[4].value == Outlet Molar Flow Rate of Implicit Gibbs 
-# m_implicit.input_vars[5].value == Outlet Molar CH4 Composition of Implicit Gibbs 
+# m_implicit.egb.inputs[4].value == Outlet Molar Flow Rate of Implicit Gibbs 
+# m_implicit.egb.inputs[5].value == Outlet Molar CH4 Composition of Implicit Gibbs 
 
 m_implicit.compressor_efficiency = Constraint(expr = m_implicit.fs.C101.efficiency_isentropic[0] == 0.9)
 m_implicit.conversion1 = Constraint(expr = m_implicit.conversion == 0.9)
@@ -274,7 +274,7 @@ m_implicit.fs.heating_cost = Expression(expr=2.2e-7 * m_implicit.fs.H101.heat_du
 m_implicit.fs.compression_cost = Expression(expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0])
 m_implicit.fs.operating_cost = Expression(expr=(3600 * 8000 * (m_implicit.fs.heating_cost + m_implicit.fs.cooling_cost + m_implicit.fs.compression_cost)))
 m_implicit.fs.objective = Objective(expr=m_implicit.fs.operating_cost)
-
+# m_implicit.egb.inputs[3] == heat duty of Implicit Gibbs
 # Link inputs to the implicit reactor to the outputs of H101.
 m_implicit.link_R101_imp1 = Constraint(expr = m.fs.R101.inlet.temperature[0] == m_implicit.fs.H101.outlet.temperature[0])
 m_implicit.link_R101_imp2= Constraint(expr = m.fs.R101.inlet.pressure[0] == m_implicit.fs.H101.outlet.pressure[0])
