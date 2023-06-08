@@ -1,3 +1,11 @@
+##########################
+########################## FIRST: BUILD A GIBBS REACTOR
+##########################
+import numpy as np
+import random
+import pandas as pd
+import pyomo.environ as pyo
+from idaes.core.util.exceptions import InitializationError
 from pyomo.environ import (
     Constraint,
     Var,
@@ -9,7 +17,7 @@ from pyomo.environ import (
     units as pyunits,
 )
 from pyomo.network import Arc
-import pyomo.environ as pyo
+
 from idaes.core import FlowsheetBlock
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.models.unit_models import (
@@ -26,26 +34,11 @@ from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 
-#################################################
-################################################# Create Original Flowsheet
-#################################################
 
 m = ConcreteModel()
 m.fs = FlowsheetBlock(dynamic=False)
 thermo_props_config_dict = get_prop(components=["CH4", "H2O", "H2", "CO", "CO2"])
 m.fs.thermo_params = GenericParameterBlock(**thermo_props_config_dict)
-
-m.fs.CH4 = Feed(property_package=m.fs.thermo_params)
-m.fs.H2O = Feed(property_package=m.fs.thermo_params)
-m.fs.M101 = Mixer(
-    property_package=m.fs.thermo_params, inlet_list=["methane_feed", "steam_feed"]
-)
-m.fs.H101 = Heater(
-    property_package=m.fs.thermo_params,
-    has_pressure_change=False,
-    has_phase_equilibrium=False,
-)
-m.fs.C101 = Compressor(property_package=m.fs.thermo_params)
 
 m.fs.R101 = GibbsReactor(
     property_package=m.fs.thermo_params,
@@ -53,31 +46,16 @@ m.fs.R101 = GibbsReactor(
     has_pressure_change=False,
 )
 
-m.fs.s01 = Arc(source=m.fs.CH4.outlet, destination=m.fs.M101.methane_feed)
-m.fs.s02 = Arc(source=m.fs.H2O.outlet, destination=m.fs.M101.steam_feed)
-m.fs.s03 = Arc(source=m.fs.M101.outlet, destination=m.fs.C101.inlet)
-m.fs.s04 = Arc(source=m.fs.C101.outlet, destination=m.fs.H101.inlet)
-m.fs.s05 = Arc(source=m.fs.H101.outlet, destination=m.fs.R101.inlet)
+flow_H2O = 234  # mol/s
+flow_CH4 = 75  # mol/s
+total_flow_in = flow_H2O + flow_CH4
 
-TransformationFactory("network.expand_arcs").apply_to(m)
+m.fs.R101.inlet.mole_frac_comp[0, "CH4"].fix(flow_CH4 / total_flow_in)
+m.fs.R101.inlet.mole_frac_comp[0, "H2"].fix(9.9996e-06)
+m.fs.R101.inlet.mole_frac_comp[0, "CO"].fix(9.9996e-06)
+m.fs.R101.inlet.mole_frac_comp[0, "CO2"].fix(9.9996e-06)
+m.fs.R101.inlet.mole_frac_comp[0, "H2O"].fix(flow_H2O / total_flow_in)
 
-m.fs.CH4.outlet.mole_frac_comp[0, "CH4"].fix(1)
-m.fs.CH4.outlet.mole_frac_comp[0, "H2O"].fix(1e-5)
-m.fs.CH4.outlet.mole_frac_comp[0, "H2"].fix(1e-5)
-m.fs.CH4.outlet.mole_frac_comp[0, "CO"].fix(1e-5)
-m.fs.CH4.outlet.mole_frac_comp[0, "CO2"].fix(1e-5)
-m.fs.CH4.outlet.flow_mol.fix(75 * pyunits.mol / pyunits.s)
-m.fs.CH4.outlet.temperature.fix(298.15 * pyunits.K)
-m.fs.CH4.outlet.pressure.fix(1e5 * pyunits.Pa)
-
-m.fs.H2O.outlet.mole_frac_comp[0, "CH4"].fix(1e-5)
-m.fs.H2O.outlet.mole_frac_comp[0, "H2O"].fix(1)
-m.fs.H2O.outlet.mole_frac_comp[0, "H2"].fix(1e-5)
-m.fs.H2O.outlet.mole_frac_comp[0, "CO"].fix(1e-5)
-m.fs.H2O.outlet.mole_frac_comp[0, "CO2"].fix(1e-5)
-m.fs.H2O.outlet.flow_mol.fix(234 * pyunits.mol / pyunits.s)
-m.fs.H2O.outlet.temperature.fix(373.15 * pyunits.K)
-m.fs.H2O.outlet.pressure.fix(1e5 * pyunits.Pa)
 m.fs.R101.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
 
 m.fs.R101.conv_constraint = Constraint(
@@ -90,34 +68,45 @@ m.fs.R101.conv_constraint = Constraint(
     )
 )
 
-m.fs.C101.efficiency_isentropic_constraint = Constraint(expr = m.fs.C101.efficiency_isentropic[0] == 0.9)
-m.fs.R101.conversion_constraint = Constraint(expr = m.fs.R101.conversion == 0.9)
+m.fs.R101.conversion.fix(0.9)
+m.fs.R101.inlet.pressure.setub(1e6)
+m.fs.R101.inlet.temperature.setub(1000)
+m.fs.R101.inlet.flow_mol.fix(total_flow_in)
 
-m.fs.CH4.initialize()
-propagate_state(arc=m.fs.s01)
+# YOU GET THESE RESULTS FOR R101:
 
-m.fs.H2O.initialize()
-propagate_state(arc=m.fs.s02)
+# ====================================================================================
+# Unit : fs.R101                                                             Time: 0.0
+# ------------------------------------------------------------------------------------
+#     Unit Performance
 
-m.fs.M101.initialize()
-propagate_state(arc=m.fs.s03)
+#     Variables: 
 
-m.fs.C101.initialize()
-propagate_state(arc=m.fs.s04)
+#     Key       : Value  : Units : Fixed : Bounds
+#     Heat Duty : 0.0000 :  watt : False : (None, None)
 
-m.fs.H101.initialize()
-propagate_state(arc=m.fs.s05)
+# ------------------------------------------------------------------------------------
+#     Stream Table
+#                                 Units         Inlet     Outlet  
+#     Total Molar Flowrate     mole / second     309.00     8000.0
+#     Total Mole Fraction CH4  dimensionless    0.24272    0.20000
+#     Total Mole Fraction H2O  dimensionless    0.75728    0.20000
+#     Total Mole Fraction H2   dimensionless 9.9996e-06    0.20000
+#     Total Mole Fraction CO   dimensionless 9.9996e-06    0.20000
+#     Total Mole Fraction CO2  dimensionless 9.9996e-06    0.20000
+#     Temperature                     kelvin     500.00     500.00
+#     Pressure                        pascal 1.3000e+05 1.3000e+05
+# ====================================================================================
 
-#################################################
-################################################# Set Up the Implicit Model for the Gibbs Reactor
-#################################################
+##########################
+########################## SECOND: BUILD FLOWSHEET AND LINK FLOWSHEET VARS TO THE IMPLICIT MODEL
+##########################
 
-## Here I changed part of your code. Instead of inlet flow being a DOF, it's T and P to the reactor.
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 
 igraph = IncidenceGraphInterface(m, include_inequality=False)
 
-# Unfix inputs
+# Unfix inputs: In this case, the DOF of the optimization problem are T and P inlet to the reactor.
 m.fs.R101.inlet.temperature.unfix()
 m.fs.R101.inlet.pressure.unfix()
 
@@ -161,7 +150,7 @@ residual_eqns = [
 ]
 residual_eqns.extend(m.outlet_mole_frac_comp_eq.values())
 
-# Note that input variables contain both the inlets (only T and P are unfixed)
+# Note that input variables contain both the inlets (only flow_mol is unfixed)
 # and outlets. This is a bit nonintuitive, as we would expect that only the
 # inlets are inputs to the reactor. However, outlets are inputs to the system
 # of equations defined by the reactor. This is admittedly a fairly clumsy
@@ -189,19 +178,15 @@ epm = ExternalPyomoModel(
     external_eqns,
 )
 
-#################################################
-################################################# Insert the Implicit Model for Gibbs into the entire flowsheet.
-#################################################
-
+#
 # Set up the "implicit formulation"
+#
 # Note that none of the bounds/inequalities on the model have been added
 # to this formulation. This will need to change.
 # If we had more than just the reactor in this model, we would need to add
 # the rest of the model, not just the "input variables", to m_implicit
 
 m_implicit = ConcreteModel()
-
-m_implicit.input_vars = pyo.Reference(input_vars)
 
 m_implicit.egb = ExternalGreyBoxBlock()
 
@@ -249,47 +234,25 @@ m_implicit.fs.H2O.outlet.flow_mol.fix(234 * pyunits.mol / pyunits.s)
 m_implicit.fs.H2O.outlet.temperature.fix(373.15 * pyunits.K)
 m_implicit.fs.H2O.outlet.pressure.fix(1e5 * pyunits.Pa)
 
-m_implicit.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
-
-m_implicit.conv_constraint = Constraint(
-    expr=m_implicit.conversion
-    * m_implicit.fs.H101.outlet.flow_mol[0]
-    * m_implicit.fs.H101.outlet.mole_frac_comp[0, "CH4"]
-    == (
-        m_implicit.fs.H101.outlet.flow_mol[0] * m_implicit.fs.H101.outlet.mole_frac_comp[0, "CH4"]
-        - m_implicit.egb.inputs[4].value * m_implicit.egb.inputs[5].value
-    )
-)
-
-# m_implicit.input_vars[4].value == Outlet Molar Flow Rate of Implicit Gibbs 
-# m_implicit.input_vars[5].value == Outlet Molar CH4 Composition of Implicit Gibbs 
-
-# set bounds for conversion, C101 and H101.
-
 m_implicit.compressor_efficiency = Constraint(expr = m_implicit.fs.C101.efficiency_isentropic[0] == 0.9)
-m_implicit.conversion1 = Constraint(expr = m_implicit.conversion == 0.9)
-m_implicit.C101_bounds1 = Constraint(expr = m_implicit.fs.C101.outlet.pressure[0] <= 1e6)
-m_implicit.C101_bounds2 = Constraint(expr = m_implicit.fs.C101.inlet.pressure[0] >= 1e5)
-m_implicit.H101_bounds1 = Constraint(expr = m_implicit.fs.H101.outlet.temperature[0] <= 1000)
-m_implicit.H101_bounds2 = Constraint(expr = m_implicit.fs.H101.heat_duty[0] >= 0)
 
-# set objective
+# LINK HEAT EXCHANGER OUTPUTS TO THE INPUTS OF THE IMPLICIT BLOCK
+@m_implicit.Constraint()
+def linking_T_to_egb(m_implicit):
+    return m_implicit.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0].value
 
+@m_implicit.Constraint()
+def linking_P_to_egb(m_implicit):
+    return m_implicit.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1].value
+
+# SET OBJECTIVE 
 m_implicit.fs.cooling_cost = Expression(expr=0.212e-7 * (m_implicit.egb.inputs[3].value))  
 m_implicit.fs.heating_cost = Expression(expr=2.2e-7 * m_implicit.fs.H101.heat_duty[0])
 m_implicit.fs.compression_cost = Expression(expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0])
 m_implicit.fs.operating_cost = Expression(expr=(3600 * 8000 * (m_implicit.fs.heating_cost + m_implicit.fs.cooling_cost + m_implicit.fs.compression_cost)))
 m_implicit.fs.objective = Objective(expr=m_implicit.fs.operating_cost)
 
-# Link inputs to the implicit reactor to the outputs of H101.
-m_implicit.link_R101_imp1 = Constraint(expr = m.fs.R101.inlet.temperature[0] == m_implicit.fs.H101.outlet.temperature[0])
-m_implicit.link_R101_imp2= Constraint(expr = m.fs.R101.inlet.pressure[0] == m_implicit.fs.H101.outlet.pressure[0])
-#m_implicit.link_R101_imp3 = Constraint(expr = m.fs.R101.inlet.flow_mol[0] == m_implicit.fs.H101.outlet.flow_mol[0])
-# @m_implicit.Constraint(m_implicit.fs.thermo_params.component_list)
-# def outlet_mole_frac_comp_eq(m_implicit, j):
-#     return m_implicit.fs.H101.outlet.mole_frac_comp[0, j] == m.fs.R101.inlet.mole_frac_comp[0, j]
-
-# Initialize and solve each unit operation
+# INITIALIZE AND SOLVE EACH UNIT OPERATION
 m_implicit.fs.CH4.initialize()
 propagate_state(arc=m_implicit.fs.s01)
 
@@ -304,3 +267,52 @@ propagate_state(arc=m_implicit.fs.s04)
 
 solver = pyo.SolverFactory("cyipopt")
 solver.solve(m_implicit, tee=True)
+
+# THIS CODE ABOVE RUNS
+###############################################################################
+# THE SOLUTION OF THE IMPLICIT BLOCK IS:
+# inputs : Size=10, Index=egb.inputs_index, ReferenceTo=[<pyomo.core.base.var.ScalarVar object at 0x000001337FB7F0D0>, <pyomo.core.base.var.ScalarVar object at 0x000001337FB7EEA0>, <pyomo.core.base.var.ScalarVar object at 0x000001337FB7C510>, <pyomo.core.base.var.ScalarVar object at 0x000001337FB7C040>, <pyomo.core.base.var.ScalarVar object at 0x000001337FA9B060>, <pyomo.core.base.var._GeneralVarData object at 0x000001337FB7C0B0>, <pyomo.core.base.var._GeneralVarData object at 0x000001337FB7C4A0>, <pyomo.core.base.var._GeneralVarData object at 0x000001337FB7C2E0>, <pyomo.core.base.var._GeneralVarData object at 0x000001337FB7C270>, <pyomo.core.base.var._GeneralVarData object at 0x000001337FB7C200>]
+#     Key : Lower   : Value                : Upper     : Fixed : Stale : Domain
+#       0 :  273.15 :      636.57500363425 :      1000 : False : False : NonNegativeReals
+#       1 : 50000.0 :             525000.0 : 1000000.0 : False : False : NonNegativeReals
+#       2 :    None :   1033.5142306594703 :      None : False : False :            Reals
+#       3 :    None :    19853302.77135539 :      None : False : False :            Reals
+#       4 :    None :       444.0092696292 :      None : False : False :            Reals
+#       5 :    None : 0.016891539238051003 :      None : False : False :            Reals
+#       6 :    None :  0.30999431995769683 :      None : False : False :            Reals
+#       7 :    None :   0.5210763695902061 :      None : False : False :            Reals
+#       8 :    None :  0.08703296105121716 :      None : False : False :            Reals
+#       9 :    None :  0.06500481016282905 :      None : False : False :            Reals
+
+# THIS SOLUTION MAKES SENSE. HOWEVER, IT SEEMS LIKE THE HEAT EXCHANGER IS NOT CONNECTING PROPERLY 
+# TO THE IMPLICIT BLOCK.
+
+# ====================================================================================
+# Unit : fs.H101                                                             Time: 0.0
+# ------------------------------------------------------------------------------------
+#     Unit Performance
+
+#     Variables: 
+
+#     Key       : Value      : Units : Fixed : Bounds
+#     Heat Duty : 1.3751e+06 :  watt : False : (None, None)
+
+# ------------------------------------------------------------------------------------
+#     Stream Table
+#                                 Units         Inlet     Outlet  
+#     Total Molar Flowrate     mole / second     309.01     309.01
+#     Total Mole Fraction CH4  dimensionless    0.24272    0.24272
+#     Total Mole Fraction H2O  dimensionless    0.75725    0.75725
+#     Total Mole Fraction H2   dimensionless 9.9996e-06 9.9996e-06
+#     Total Mole Fraction CO   dimensionless 9.9996e-06 9.9996e-06
+#     Total Mole Fraction CO2  dimensionless 9.9996e-06 9.9996e-06
+#     Temperature                     kelvin     379.09     500.00
+#     Pressure                        pascal 1.3000e+05 1.3000e+05
+# ====================================================================================
+
+## THE OUTLET TEMPERATURE AND PRESSURE OF H101 IS 500 K and 130000 Pa, WHICH COINCIDENTALLY
+## ARE THE SAME RESULTS THAT WE OBTAINED IN STEP 1 (SEE LINES 97 AND 98). HOWEVER,
+## THE INLET TEMPERATURE AND PRESSURE TO THE IMPLICIT BLOCK IS 636.57 k AND 525000 Pa (SEE LINES 276-277)
+
+## BOTTOM LINE, THERE IS NOT AN AGREEMENT BETWEEN THE INLET T AND P FOR THE IMPLICIT BLOCK, AND
+## THE OUTLET T AND P OF H101.
