@@ -91,9 +91,9 @@ m.fs.R101.conv_constraint = Constraint(
     )
 )
 
-Tin = random.uniform(Tin_min, Tin_max)
-Pin = random.uniform(Pin_min, Pin_max)
-conversion_CH4 = random.uniform(conversion_CH4_min, conversion_CH4_max)
+Tin = (Tin_max + Tin_min) / 2
+Pin = (Pin_max + Pin_min) / 2
+conversion_CH4 = (conversion_CH4_max + conversion_CH4_min) / 2
 m.fs.R101.inlet.temperature.fix(Tin)
 m.fs.R101.inlet.flow_mol.fix(total_flow_in)
 m.fs.R101.inlet.pressure.fix(Pin)
