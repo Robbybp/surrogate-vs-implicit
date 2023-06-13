@@ -90,8 +90,8 @@ m.fs.R101.conv_constraint = Constraint(
 )
 
 m.fs.R101.conversion.fix(0.9)
-m.fs.R101.inlet.pressure.setub(1e6) # Pa
-m.fs.R101.inlet.temperature.setub(1000) # K
+m.fs.R101.inlet.pressure.setub(1e6)  # Pa
+m.fs.R101.inlet.temperature.setub(1000)  # K
 m.fs.R101.inlet.flow_mol.fix(total_flow_in)
 
 solver = get_solver()
@@ -115,21 +115,36 @@ m.outlet_temperature = Var(initialize=m.fs.R101.outlet.temperature[0].value)
 m.outlet_heatDuty = Var(initialize=m.fs.R101.heat_duty[0].value)
 m.outlet_flow_mol = Var(initialize=m.fs.R101.outlet.flow_mol[0].value)
 
+
 @m.Constraint(m.fs.thermo_params.component_list)
 def outlet_mole_frac_comp_eq(m, j):
     return m.outlet_mole_frac_comp[j] == m.fs.R101.outlet.mole_frac_comp[0, j]
+
 
 @m.Constraint()
 def outlet_temperature_eq(m):
     return m.outlet_temperature == m.fs.R101.outlet.temperature[0]
 
+
 @m.Constraint()
 def outlet_heatDuty_eq(m):
     return m.outlet_heatDuty == m.fs.R101.heat_duty[0]
 
+
 @m.Constraint()
 def outlet_flow_mol_eq(m):
     return m.outlet_flow_mol == m.fs.R101.outlet.flow_mol[0]
+
+#
+# Put bounds on residual vars. Then we can remove bounds on external variables
+#
+for j in m.outlet_mole_frac_comp:
+    m.outlet_mole_frac_comp[j].setlb(m.fs.R101.outlet.mole_frac_comp[0, j].lb)
+    m.outlet_mole_frac_comp[j].setub(m.fs.R101.outlet.mole_frac_comp[0, j].ub)
+m.outlet_temperature.setlb(m.fs.R101.outlet.temperature[0].lb)
+m.outlet_temperature.setub(m.fs.R101.outlet.temperature[0].ub)
+m.outlet_heatDuty.setlb(m.fs.R101.heat_duty[0].lb)
+m.outlet_heatDuty.setub(m.fs.R101.heat_duty[0].ub)
 
 residual_eqns = [
     m.outlet_temperature_eq,
@@ -145,14 +160,20 @@ input_vars = [
     m.outlet_heatDuty,
     m.outlet_flow_mol,
 ]
+# Since we're not using outlet temperature or flow_mol, can we remove them from
+# the "implicit function inputs" (as well as their linking ("residual")
+# constraints)?
 input_vars.extend(m.outlet_mole_frac_comp.values())
 
 external_eqns = list(igraph.constraints)
-external_vars = [var for var in igraph.variables if var is not m.fs.R101.inlet.temperature[0]]
+external_vars = [
+    var for var in igraph.variables if var is not m.fs.R101.inlet.temperature[0]
+]
 external_vars = [var for var in external_vars if var is not m.fs.R101.inlet.pressure[0]]
 
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
+
 epm = ExternalPyomoModel(
     input_vars,
     external_vars,
@@ -175,7 +196,8 @@ m_implicit.fs.thermo_params = GenericParameterBlock(**thermo_props_config_dict)
 m_implicit.fs.CH4 = Feed(property_package=m_implicit.fs.thermo_params)
 m_implicit.fs.H2O = Feed(property_package=m_implicit.fs.thermo_params)
 m_implicit.fs.M101 = Mixer(
-    property_package=m_implicit.fs.thermo_params, inlet_list=["methane_feed", "steam_feed"]
+    property_package=m_implicit.fs.thermo_params,
+    inlet_list=["methane_feed", "steam_feed"],
 )
 m_implicit.fs.H101 = Heater(
     property_package=m_implicit.fs.thermo_params,
@@ -185,10 +207,18 @@ m_implicit.fs.H101 = Heater(
 
 m_implicit.fs.C101 = Compressor(property_package=m_implicit.fs.thermo_params)
 
-m_implicit.fs.s01 = Arc(source=m_implicit.fs.CH4.outlet, destination=m_implicit.fs.M101.methane_feed)
-m_implicit.fs.s02 = Arc(source=m_implicit.fs.H2O.outlet, destination=m_implicit.fs.M101.steam_feed)
-m_implicit.fs.s03 = Arc(source=m_implicit.fs.M101.outlet, destination=m_implicit.fs.C101.inlet)
-m_implicit.fs.s04 = Arc(source=m_implicit.fs.C101.outlet, destination=m_implicit.fs.H101.inlet)
+m_implicit.fs.s01 = Arc(
+    source=m_implicit.fs.CH4.outlet, destination=m_implicit.fs.M101.methane_feed
+)
+m_implicit.fs.s02 = Arc(
+    source=m_implicit.fs.H2O.outlet, destination=m_implicit.fs.M101.steam_feed
+)
+m_implicit.fs.s03 = Arc(
+    source=m_implicit.fs.M101.outlet, destination=m_implicit.fs.C101.inlet
+)
+m_implicit.fs.s04 = Arc(
+    source=m_implicit.fs.C101.outlet, destination=m_implicit.fs.H101.inlet
+)
 
 TransformationFactory("network.expand_arcs").apply_to(m_implicit)
 
@@ -210,41 +240,33 @@ m_implicit.fs.H2O.outlet.flow_mol.fix(234 * pyunits.mol / pyunits.s)
 m_implicit.fs.H2O.outlet.temperature.fix(373.15 * pyunits.K)
 m_implicit.fs.H2O.outlet.pressure.fix(1e5 * pyunits.Pa)
 
-m_implicit.compressor_efficiency = Constraint(expr = m_implicit.fs.C101.efficiency_isentropic[0] == 0.9)
+m_implicit.compressor_efficiency = Constraint(
+    expr=m_implicit.fs.C101.efficiency_isentropic[0] == 0.9
+)
+
 
 @m_implicit.Constraint()
 def linking_T_to_egb(m_implicit):
-    return m_implicit.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0].value
+    return m_implicit.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0]
+
 
 @m_implicit.Constraint()
 def linking_P_to_egb(m_implicit):
-    return m_implicit.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1].value
+    return m_implicit.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1]
 
-# set objective 
 
-m_implicit.fs.cooling_cost = Expression(expr=0.212e-7 * (m_implicit.egb.inputs[3].value))  
+# set objective
+
+m_implicit.fs.cooling_cost = Expression(expr=0.212e-7 * (m_implicit.egb.inputs[3]))
 m_implicit.fs.heating_cost = Expression(expr=2.2e-7 * m_implicit.fs.H101.heat_duty[0])
-m_implicit.fs.compression_cost = Expression(expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0])
-m_implicit.fs.operating_cost = Expression(expr=(3600 * 8000 * (m_implicit.fs.heating_cost + m_implicit.fs.cooling_cost + m_implicit.fs.compression_cost)))
-m_implicit.fs.objective = Objective(expr=m_implicit.fs.operating_cost)
-
-# Initialize and solve each unit operation
-m_implicit.fs.CH4.initialize()
-propagate_state(arc=m_implicit.fs.s01)
-
-m_implicit.fs.H2O.initialize()
-propagate_state(arc=m_implicit.fs.s02)
-
-m_implicit.fs.M101.initialize()
-propagate_state(arc=m_implicit.fs.s03)
-
-m_implicit.fs.C101.initialize()
-propagate_state(arc=m_implicit.fs.s04)
-
-solver = pyo.SolverFactory("cyipopt")
-solver.solve(m_implicit, tee=True)
-
-print(value(m_implicit.fs.objective))
+m_implicit.fs.compression_cost = Expression(
+    expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0]
+)
+m_implicit.fs.operating_cost = Expression(
+    expr=(
+        3600
+        * 8000
+        (value(m_implicit.fs.objective))
 m_implicit.fs.objective.display()
 print(m_implicit.fs.C101.report())
 print(m_implicit.fs.H101.report())
