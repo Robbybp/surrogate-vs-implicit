@@ -141,10 +141,11 @@ def Alamo_Gibbs_Flowsheet(alamo_surrogate_dict, conversion):
     m.fs.H101.outlet.pressure.unfix()
     m.fs.H101.outlet.temperature.unfix()
 
-    # set constraints for H101 outlet temperature and heat duty 
+    # set constraints for H101 outlet temperature and heat duty, as well as C101 outlet pressure 
     m.fs.H101.heat_duty[0].setlb(0)
     m.fs.H101.outlet.temperature[0].setub(1000) 
-
+    m.fs.C101.outlet.pressure[0].setlb(1e6)
+    
     assert degrees_of_freedom(m) == 2
 
     return m
