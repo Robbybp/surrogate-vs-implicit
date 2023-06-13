@@ -21,9 +21,7 @@
 
 ######## IMPORT PACKAGES ########
 
-import numpy as np
 import random
-import pandas as pd
 import pyomo.environ as pyo
 from idaes.core.util.exceptions import InitializationError
 from pyomo.environ import (
@@ -89,11 +87,18 @@ m.fs.R101.conv_constraint = Constraint(
     )
 )
 
-m.fs.R101.conversion.fix(0.9)
-m.fs.R101.inlet.pressure.setub(1e6)  # Pa
-m.fs.R101.inlet.temperature.setub(1000)  # K
-m.fs.R101.inlet.flow_mol.fix(total_flow_in)
+Tin_min = 500 # K
+Tin_max = 700 # K
+Pin_min = 5e5 # Pa
+Pin_max = 1e6 # Pa
 
+Tin = random.uniform(Tin_min, Tin_max) 
+Pin = random.uniform(Pin_min, Pin_max)
+m.fs.R101.conversion.fix(0.9)
+m.fs.R101.inlet.pressure.fix(Pin) # Set a random value for pressure to initialize the Gibbs reactor
+m.fs.R101.inlet.temperature.fix(Tin) # Set a random value for temperature to initialize the Gibbs reactor
+m.fs.R101.inlet.flow_mol.fix(total_flow_in)
+m.fs.R101.initialize()
 solver = get_solver()
 results = solver.solve(m, tee=True)
 
@@ -103,7 +108,7 @@ from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 
 igraph = IncidenceGraphInterface(m, include_inequality=False)
 
-# Unfix inputs
+# Unfix inputs, which are the degrees of freedom of the optimization problem
 m.fs.R101.inlet.temperature.unfix()
 m.fs.R101.inlet.pressure.unfix()
 
@@ -112,7 +117,7 @@ for j in m.fs.thermo_params.component_list:
     m.outlet_mole_frac_comp[j] = m.fs.R101.outlet.mole_frac_comp[0, j]
 
 m.outlet_temperature = Var(initialize=m.fs.R101.outlet.temperature[0].value)
-m.outlet_heatDuty = Var(initialize=m.fs.R101.heat_duty[0].value)
+m.heatDuty = Var(initialize=m.fs.R101.heat_duty[0].value)
 m.outlet_flow_mol = Var(initialize=m.fs.R101.outlet.flow_mol[0].value)
 
 
@@ -127,28 +132,17 @@ def outlet_temperature_eq(m):
 
 
 @m.Constraint()
-def outlet_heatDuty_eq(m):
-    return m.outlet_heatDuty == m.fs.R101.heat_duty[0]
+def heatDuty_eq(m):
+    return m.heatDuty == m.fs.R101.heat_duty[0]
 
 
 @m.Constraint()
 def outlet_flow_mol_eq(m):
     return m.outlet_flow_mol == m.fs.R101.outlet.flow_mol[0]
 
-#
-# Put bounds on residual vars. Then we can remove bounds on external variables
-#
-for j in m.outlet_mole_frac_comp:
-    m.outlet_mole_frac_comp[j].setlb(m.fs.R101.outlet.mole_frac_comp[0, j].lb)
-    m.outlet_mole_frac_comp[j].setub(m.fs.R101.outlet.mole_frac_comp[0, j].ub)
-m.outlet_temperature.setlb(m.fs.R101.outlet.temperature[0].lb)
-m.outlet_temperature.setub(m.fs.R101.outlet.temperature[0].ub)
-m.outlet_heatDuty.setlb(m.fs.R101.heat_duty[0].lb)
-m.outlet_heatDuty.setub(m.fs.R101.heat_duty[0].ub)
-
 residual_eqns = [
     m.outlet_temperature_eq,
-    m.outlet_heatDuty_eq,
+    m.heatDuty_eq,
     m.outlet_flow_mol_eq,
 ]
 residual_eqns.extend(m.outlet_mole_frac_comp_eq.values())
@@ -157,12 +151,14 @@ input_vars = [
     m.fs.R101.inlet.temperature[0],
     m.fs.R101.inlet.pressure[0],
     m.outlet_temperature,
-    m.outlet_heatDuty,
+    m.heatDuty,
     m.outlet_flow_mol,
 ]
+
 # Since we're not using outlet temperature or flow_mol, can we remove them from
 # the "implicit function inputs" (as well as their linking ("residual")
 # constraints)?
+
 input_vars.extend(m.outlet_mole_frac_comp.values())
 
 external_eqns = list(igraph.constraints)
@@ -245,29 +241,62 @@ m_implicit.compressor_efficiency = Constraint(
 )
 
 
+# Link the flowsheet to the implicit Gibbs reactor
 @m_implicit.Constraint()
 def linking_T_to_egb(m_implicit):
     return m_implicit.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0]
-
 
 @m_implicit.Constraint()
 def linking_P_to_egb(m_implicit):
     return m_implicit.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1]
 
+# Add bounds on auxiliary input variables
+@m_implicit.Constraint()
+def maximum_temperature_H101(m_implicit):
+    return m_implicit.fs.H101.outlet.temperature[0] <= 1000
 
-# set objective
+@m_implicit.Constraint()
+def minimum_pressure_C101(m_implicit):
+    return m_implicit.fs.C101.outlet.pressure[0] >= 1e6
 
+@m_implicit.Constraint()
+def minimum_heatDuty_H101(m_implicit):
+    return m_implicit.fs.H101.heat_duty[0] >= 0
+
+# Set objective 
 m_implicit.fs.cooling_cost = Expression(expr=0.212e-7 * (m_implicit.egb.inputs[3]))
 m_implicit.fs.heating_cost = Expression(expr=2.2e-7 * m_implicit.fs.H101.heat_duty[0])
-m_implicit.fs.compression_cost = Expression(
-    expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0]
-)
-m_implicit.fs.operating_cost = Expression(
-    expr=(
-        3600
-        * 8000
-        (value(m_implicit.fs.objective))
-m_implicit.fs.objective.display()
-print(m_implicit.fs.C101.report())
-print(m_implicit.fs.H101.report())
-m_implicit.egb.inputs.display()
+m_implicit.fs.compression_cost = Expression(expr=0.12e-5 * m_implicit.fs.C101.work_isentropic[0])
+m_implicit.fs.operating_cost = Expression(expr=(3600 * 8000 * (m_implicit.fs.heating_cost + m_implicit.fs.cooling_cost + m_implicit.fs.compression_cost)))
+m_implicit.fs.objective = Objective(expr=m_implicit.fs.operating_cost)
+
+# Initialize and solve each unit operation
+m_implicit.fs.CH4.initialize()
+propagate_state(arc=m_implicit.fs.s01)
+
+m_implicit.fs.H2O.initialize()
+propagate_state(arc=m_implicit.fs.s02)
+
+m_implicit.fs.M101.initialize()
+propagate_state(arc=m_implicit.fs.s03)
+
+m_implicit.fs.C101.initialize()
+propagate_state(arc=m_implicit.fs.s04)
+
+solver = pyo.SolverFactory("cyipopt")
+solver.solve(m_implicit, tee=True)
+
+print(f"The minimum operating cost is USD {value(m_implicit.fs.objective)}/yr.")
+print("")
+print("GIBBS REACTOR RESULTS")
+print("")
+print(f"Inlet temperature: {m_implicit.egb.inputs[0].value:1.2f} K.")
+print(f"Inlet pressure: {m_implicit.egb.inputs[1].value:1.2f} Pa.")
+print(f"Outlet temperature: {m_implicit.egb.inputs[2].value:1.2f} K.")
+print(f"Heat Duty: {m_implicit.egb.inputs[3].value:1.2f} W.")
+print(f"Molar flow rate: {m_implicit.egb.inputs[4].value:1.2f} mol/s.")
+print(f"Outlet CH4 composition: {m_implicit.egb.inputs[5].value:1.4f}.")
+print(f"Outlet H2O composition: {m_implicit.egb.inputs[6].value:1.4f}.")
+print(f"Outlet H2 composition: {m_implicit.egb.inputs[7].value:1.4f}.")
+print(f"Outlet CO composition: {m_implicit.egb.inputs[8].value:1.4f}.")
+print(f"Outlet CO2 composition: {m_implicit.egb.inputs[9].value:1.4f}.")
