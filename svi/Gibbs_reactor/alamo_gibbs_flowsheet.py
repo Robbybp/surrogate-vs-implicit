@@ -47,7 +47,7 @@ from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 
-def Alamo_Gibbs_Flowsheet(alamo_surrogate_dict, conversion):
+def alamo_gibbs_flowsheet(alamo_surrogate_dict, conversion):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
     thermo_props_config_dict = get_prop(components=["CH4", "H2O", "H2", "CO", "CO2"])
@@ -151,7 +151,7 @@ def Alamo_Gibbs_Flowsheet(alamo_surrogate_dict, conversion):
     return m
 
 def main():
-    m = Alamo_Gibbs_Flowsheet('alamo_surrogate.json', conversion = 0.9)
+    m = alamo_gibbs_flowsheet('alamo_surrogate.json', conversion = 0.9)
     solver = get_solver()
     solver.solve(m, tee=True)
 
