@@ -29,6 +29,7 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
+from pyomo.common.collections import ComponentSet
 from pyomo.network import Arc
 import pyomo.environ as pyo
 from idaes.core import FlowsheetBlock
@@ -203,6 +204,10 @@ def make_implicit(model):
     external_vars = [var for var in igraph.variables if var is not model.fs.R101.inlet.temperature[0]]
     external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.pressure[0]]
 
+    external_var_set = ComponentSet(external_vars)
+    external_eqn_set = ComponentSet(external_eqns)
+    residual_eqn_set = ComponentSet(residual_eqns)
+
     epm = ExternalPyomoModel(
         input_vars,
         external_vars,
@@ -219,10 +224,33 @@ def make_implicit(model):
     m_implicit.link_P_EGB = Constraint(expr = model.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1])
     m_implicit.link_HeatDuty_EGB = Constraint(expr = model.fs.R101.heat_duty[0] == m_implicit.egb.inputs[3])
 
+    # TODO: Attach rest of flowsheet model to m_implicit
+    full_igraph = IncidenceGraphInterface(model)
+    fullspace_cons = [
+        con for con in full_igraph.constraints
+        if con not in residual_eqn_set and con not in external_eqn_set
+    ]
+    fullspace_vars = [
+        var for var in full_igraph.variables
+        if var not in external_var_set
+    ]
+
+    m_implicit.fullspace_cons = pyo.Reference(fullspace_cons)
+    m_implicit.fullspace_vars = pyo.Reference(fullspace_vars)
+    m_implicit.objective = pyo.Reference(model.fs.objective)
+
+    for con in full_igraph.get_adjacent_to(model.fs.R101.control_volume.heat[0.0]):
+        print(con.name)
+
     solver = pyo.SolverFactory("cyipopt")
-    solver.solve(model, tee=True)
+    solver.solve(m_implicit, tee=True)
     return m_implicit.egb.inputs.display()
 
 if __name__ == "__main__":
+    m1 = make_fullspace_gibbs_flowsheet(conversion=0.9)
+    solver = pyo.SolverFactory("ipopt")
+    solver.solve(m1, tee=True)
+    # Print results
+
     model = make_fullspace_gibbs_flowsheet(conversion = 0.9)
-    make_implicit(model)
+    m_implicit = make_implicit(model)
