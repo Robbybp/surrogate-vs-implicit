@@ -235,12 +235,17 @@ def make_implicit(model):
         if var not in external_var_set
     ]
 
+    m_implicit.cooling_cost = Expression(expr=0.212e-7 * (model.heatDuty))  # the reaction is endothermic, so R101 duty is positive
+    m_implicit.heating_cost = Expression(expr=2.2e-7 * model.fs.H101.heat_duty[0])  # the stream must be heated to T_rxn, so H101 duty is positive
+    m_implicit.compression_cost = Expression(expr=0.12e-5 * model.fs.C101.work_isentropic[0])  # the stream must be pressurized, so the C101 work is positive
+    m_implicit.operating_cost = Expression(expr=(3600 * 8000 * (model.fs.heating_cost + model.fs.cooling_cost + model.fs.compression_cost)))
+    m_implicit.objective = Objective(expr=m_implicit.operating_cost) 
+
     m_implicit.fullspace_cons = pyo.Reference(fullspace_cons)
     m_implicit.fullspace_vars = pyo.Reference(fullspace_vars)
-    m_implicit.objective = pyo.Reference(model.fs.objective)
 
-    for con in full_igraph.get_adjacent_to(model.fs.R101.control_volume.heat[0.0]):
-        print(con.name)
+    #for con in full_igraph.get_adjacent_to(model.fs.R101.control_volume.heat[0.0]):
+    #    print(con.name)
 
     solver = pyo.SolverFactory("cyipopt")
     solver.solve(m_implicit, tee=True)
