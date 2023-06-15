@@ -28,7 +28,7 @@ from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
 
-def FullSpace_Gibbs_Flowsheet(conversion):
+def make_fullspace_gibbs_flowsheet(conversion):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
     thermo_props_config_dict = get_prop(components=["CH4", "H2O", "H2", "CO", "CO2"])
@@ -202,5 +202,6 @@ def make_implicit(model):
     solver.solve(model, tee=True)
     return m_implicit.egb.inputs.display()
 
-model = FullSpace_Gibbs_Flowsheet(conversion = 0.9)
-make_implicit(model)
+if __name__ == "__main__":
+    model = make_fullspace_gibbs_flowsheet(conversion = 0.9)
+    make_implicit(model)
