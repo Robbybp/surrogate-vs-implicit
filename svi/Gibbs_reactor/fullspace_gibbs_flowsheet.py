@@ -62,7 +62,7 @@ from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 
-def FullSpace_Gibbs_Flowsheet(conversion):
+def fullspace_gibbs_flowsheet(conversion):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
 
@@ -178,7 +178,7 @@ def FullSpace_Gibbs_Flowsheet(conversion):
     return m
 
 def main():
-    m = FullSpace_Gibbs_Flowsheet(conversion = 0.9)
+    m = fullspace_gibbs_flowsheet(conversion = 0.9)
     solver = get_solver()
     solver.solve(m, tee=True)
 
