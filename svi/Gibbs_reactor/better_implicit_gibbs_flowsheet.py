@@ -76,14 +76,8 @@ def make_fullspace_gibbs_flowsheet(conversion):
     m.fs.s02 = Arc(source=m.fs.H2O.outlet, destination=m.fs.M101.steam_feed)
     m.fs.s03 = Arc(source=m.fs.M101.outlet, destination=m.fs.C101.inlet)
     m.fs.s04 = Arc(source=m.fs.C101.outlet, destination=m.fs.H101.inlet)
-    # m.fs.s05 = Arc(source=m.fs.H101.outlet, destination=m.fs.R101.inlet)
 
     TransformationFactory("network.expand_arcs").apply_to(m)
-
-    m.fs.cooling_cost = Expression(expr=0.212e-7 * (m.fs.R101.heat_duty[0]))  # the reaction is endothermic, so R101 duty is positive
-    m.fs.heating_cost = Expression(expr=2.2e-7 * m.fs.H101.heat_duty[0])  # the stream must be heated to T_rxn, so H101 duty is positive
-    m.fs.compression_cost = Expression(expr=0.12e-5 * m.fs.C101.work_isentropic[0])  # the stream must be pressurized, so the C101 work is positive
-    m.fs.operating_cost = Expression(expr=(3600 * 8000 * (m.fs.heating_cost + m.fs.cooling_cost + m.fs.compression_cost)))
 
     m.fs.CH4.outlet.mole_frac_comp[0, "CH4"].fix(1)
     m.fs.CH4.outlet.mole_frac_comp[0, "H2O"].fix(1e-5)
@@ -118,8 +112,7 @@ def make_fullspace_gibbs_flowsheet(conversion):
 
     m.fs.R101.conversion.fix(conversion)
 
-    ########### OBJECTIVE AND CONSTRAINTS ###########
-    m.fs.objective = Objective(expr=m.fs.operating_cost) 
+    ########### CONSTRAINTS ########### 
     m.fs.C101_min_outlet_P = Constraint(expr = m.fs.C101.outlet.pressure[0] >= 1e6)
     m.fs.HeatDuty_H101 = Constraint(expr = m.fs.H101.heat_duty[0] >= 0)
     m.fs.H101_max_outlet_T = Constraint(expr = m.fs.H101.outlet.temperature[0] <= 1000)
@@ -139,15 +132,7 @@ def make_fullspace_gibbs_flowsheet(conversion):
     propagate_state(arc=m.fs.s04)
 
     m.fs.H101.initialize()
-    # propagate_state(arc=m.fs.s05)
-
-    ########### PROPAGATE STATE FROM H101 TO R101 ###########
-    m.fs.R101.inlet.flow_mol.fix(m.fs.H101.outlet.flow_mol[0])
-    m.fs.R101.inlet.mole_frac_comp[0, "CH4"].fix(m.fs.H101.outlet.mole_frac_comp[0, "CH4"])
-    m.fs.R101.inlet.mole_frac_comp[0, "H2O"].fix(m.fs.H101.outlet.mole_frac_comp[0, "H2O"])
-    m.fs.R101.inlet.mole_frac_comp[0, "H2"].fix(m.fs.H101.outlet.mole_frac_comp[0, "H2"])
-    m.fs.R101.inlet.mole_frac_comp[0, "CO"].fix(m.fs.H101.outlet.mole_frac_comp[0, "CO"])
-    m.fs.R101.inlet.mole_frac_comp[0, "CO2"].fix(m.fs.H101.outlet.mole_frac_comp[0, "CO2"])
+    m.fs.R101.initialize()
     
     return m
 
@@ -193,6 +178,12 @@ def make_implicit(model):
     input_vars = [
         model.fs.R101.inlet.temperature[0],
         model.fs.R101.inlet.pressure[0],
+        model.fs.R101.inlet.mole_frac_comp[0, "CH4"],
+        model.fs.R101.inlet.mole_frac_comp[0, "H2"],
+        model.fs.R101.inlet.mole_frac_comp[0, "CO"],
+        model.fs.R101.inlet.mole_frac_comp[0, "CO2"],
+        model.fs.R101.inlet.mole_frac_comp[0, "H2O"],
+        model.fs.R101.inlet.flow_mol[0],
         model.outlet_temperature,
         model.heatDuty,
         model.outlet_flow_mol,
@@ -201,8 +192,15 @@ def make_implicit(model):
     input_vars.extend(model.outlet_mole_frac_comp.values())
 
     external_eqns = list(igraph.constraints)
+    
     external_vars = [var for var in igraph.variables if var is not model.fs.R101.inlet.temperature[0]]
     external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.pressure[0]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.mole_frac_comp[0, "CH4"]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.mole_frac_comp[0, "H2"]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.mole_frac_comp[0, "CO"]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.mole_frac_comp[0, "CO2"]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.mole_frac_comp[0, "H2O"]]
+    external_vars = [var for var in external_vars if var is not model.fs.R101.inlet.flow_mol[0]]
 
     external_var_set = ComponentSet(external_vars)
     external_eqn_set = ComponentSet(external_eqns)
@@ -219,12 +217,40 @@ def make_implicit(model):
     m_implicit = ConcreteModel()
     m_implicit.egb = ExternalGreyBoxBlock()
     m_implicit.egb.set_external_model(epm, inputs=input_vars)
+    
+    # Link the flowsheet to the implicit Gibbs reactor
+    @m_implicit.Constraint()
+    def linking_T_to_egb(m_implicit):
+        return model.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0]
 
-    m_implicit.link_T_EGB = Constraint(expr = model.fs.H101.outlet.temperature[0] == m_implicit.egb.inputs[0])
-    m_implicit.link_P_EGB = Constraint(expr = model.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1])
-    m_implicit.link_HeatDuty_EGB = Constraint(expr = model.fs.R101.heat_duty[0] == m_implicit.egb.inputs[3])
+    @m_implicit.Constraint()
+    def linking_P_to_egb(m_implicit):
+        return model.fs.H101.outlet.pressure[0] == m_implicit.egb.inputs[1]
+    
+    @m_implicit.Constraint()
+    def linking_CH4_to_egb(m_implicit):
+        return model.fs.H101.outlet.mole_frac_comp[0, "CH4"] == m_implicit.egb.inputs[2]
 
-    # TODO: Attach rest of flowsheet model to m_implicit
+    @m_implicit.Constraint()
+    def linking_H2_to_egb(m_implicit):
+        return model.fs.H101.outlet.mole_frac_comp[0, "H2"] == m_implicit.egb.inputs[3]
+
+    @m_implicit.Constraint()
+    def linking_CO_to_egb(m_implicit):
+        return model.fs.H101.outlet.mole_frac_comp[0, "CO"] == m_implicit.egb.inputs[4]
+
+    @m_implicit.Constraint()
+    def linking_CO2_to_egb(m_implicit):
+        return model.fs.H101.outlet.mole_frac_comp[0, "CO2"] == m_implicit.egb.inputs[5]
+    
+    @m_implicit.Constraint()
+    def linking_H2O_to_egb(m_implicit):
+        return model.fs.H101.outlet.mole_frac_comp[0, "H2O"] == m_implicit.egb.inputs[6]
+    
+    @m_implicit.Constraint()
+    def linking_flow_to_egb(m_implicit):
+        return model.fs.H101.outlet.flow_mol[0] == m_implicit.egb.inputs[7]
+    
     full_igraph = IncidenceGraphInterface(model)
     fullspace_cons = [
         con for con in full_igraph.constraints
@@ -235,27 +261,20 @@ def make_implicit(model):
         if var not in external_var_set
     ]
 
-    m_implicit.cooling_cost = Expression(expr=0.212e-7 * (model.heatDuty))  # the reaction is endothermic, so R101 duty is positive
+    ########## OBJECTIVE ###########
+    m_implicit.cooling_cost = Expression(expr=0.212e-7 * (m_implicit.egb.inputs[9]))  # the reaction is endothermic, so R101 duty is positive
     m_implicit.heating_cost = Expression(expr=2.2e-7 * model.fs.H101.heat_duty[0])  # the stream must be heated to T_rxn, so H101 duty is positive
     m_implicit.compression_cost = Expression(expr=0.12e-5 * model.fs.C101.work_isentropic[0])  # the stream must be pressurized, so the C101 work is positive
-    m_implicit.operating_cost = Expression(expr=(3600 * 8000 * (model.fs.heating_cost + model.fs.cooling_cost + model.fs.compression_cost)))
+    m_implicit.operating_cost = Expression(expr=(3600 * 8000 * (m_implicit.heating_cost + m_implicit.cooling_cost + m_implicit.compression_cost)))
     m_implicit.objective = Objective(expr=m_implicit.operating_cost) 
 
     m_implicit.fullspace_cons = pyo.Reference(fullspace_cons)
     m_implicit.fullspace_vars = pyo.Reference(fullspace_vars)
-
-    #for con in full_igraph.get_adjacent_to(model.fs.R101.control_volume.heat[0.0]):
-    #    print(con.name)
 
     solver = pyo.SolverFactory("cyipopt")
     solver.solve(m_implicit, tee=True)
     return m_implicit.egb.inputs.display()
 
 if __name__ == "__main__":
-    m1 = make_fullspace_gibbs_flowsheet(conversion=0.9)
-    solver = pyo.SolverFactory("ipopt")
-    solver.solve(m1, tee=True)
-    # Print results
-
     model = make_fullspace_gibbs_flowsheet(conversion = 0.9)
     m_implicit = make_implicit(model)
