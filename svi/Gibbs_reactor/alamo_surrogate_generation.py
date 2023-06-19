@@ -29,7 +29,7 @@ from idaes.core.surrogate.plotting.sm_plotter import surrogate_parity
 
 ######## FUNCTION TO GENERATE ALAMO SURROGATES ########
 
-def Gibbs_to_Alamo(file_path, show_surrogates = False, create_plots = False):
+def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
     try:
         df = pd.read_csv(file_path) # load data generated from Gibbs_data_generation.py
         if 'Unnamed: 0' in df.columns:

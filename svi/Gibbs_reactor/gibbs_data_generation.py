@@ -48,7 +48,7 @@ from idaes.models_extra.power_generation.properties.natural_gas_PR import get_pr
 # F: [mol/s]
 # Heat Duty: [W]
 
-def GibbsDataGen(num_samples, case):
+def gibbsdatagen(num_samples, case):
     df = {'Tin':[], 'Pin':[], 'Conversion':[], 'Fin':[], 'HeatDuty':[], 'Fout':[], 
       'Tout':[], 'H2':[], 'H2O':[], 'CO2':[], 'CO':[], 'CH4':[]}
     if case == 1: # more cases could be added to this function depending on what is needed in the optimization problem
