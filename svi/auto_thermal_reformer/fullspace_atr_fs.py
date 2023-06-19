@@ -274,24 +274,39 @@ if __name__ == "__main__":
     set_atr_flowsheet_inputs(m)
     initialize_atr_flowsheet(m)
     
-    ####### OBJECTIVE IS TO MAXIMIZE H2 CONCENTRATION IN PRODUCT STREAM #######
-    m.fs.obj = pyo.Objective(expr=(m.fs.product.mole_frac_comp[0, 'H2']),
-                              sense=pyo.maximize)
+    ####### OBJECTIVE IS TO MINIMIZE PRODUCT TEMPERATURE #######
+    m.fs.obj = pyo.Objective(expr=(m.fs.product.temperature[0]),
+                              sense=pyo.minimize)
     
     ####### CONSTRAINTS #######
-    
-    @m.Constraint()
-    def max_outlet_temp_reformer(m):
-        return m.fs.reformer.outlet.temperature[0] <= 1000
+    m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
 
-    @m.Constraint()
-    def max_outlet_temp_prod(m):
-        return m.fs.product.temperature[0] <= 600
+    m.fs.reformer.conv_constraint = Constraint(
+        expr=m.fs.reformer.conversion
+        * m.fs.reformer.inlet.flow_mol[0]
+        * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+        == (
+            m.fs.reformer.inlet.flow_mol[0] * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+            - m.fs.reformer.outlet.flow_mol[0] * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
+        )
+    )
+    m.fs.reformer.conversion.fix(0.9) # ACHIEVE A CONVERSION OF 0.9 IN AUTOTHERMAL REFORMER
     
-    # Unfix D.O.F. If you unfix this variable, inlet temperature, flow and composition
+    # MINIMUM H2 COMPOSITION OF 0.35 IN PRODUCT STREAM
+    @m.Constraint()
+    def min_product_H2_comp(m):
+        return m.fs.product.mole_frac_comp[0, "H2"] >= 0.35
+    
+    # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
+    @m.Constraint()
+    def min_product_flow_mol(m):
+        return m.fs.product.flow_mol[0] >= 3500
+    
+    # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
     # to the Gibbs reactor will have to be determined by the optimization problem. 
     m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet'].unfix() 
-    
+    m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
+
     solver = get_solver()
     solver.options = {
         "tol": 1e-8,
