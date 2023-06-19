@@ -32,21 +32,17 @@ from pyomo.environ import (
 )
 from pyomo.network import Arc, SequentialDecomposition
 from idaes.core import FlowsheetBlock
-from idaes.models.properties.modular_properties import GenericParameterBlock, GenericStateBlock
+from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
 import idaes.core.util.scaling as iscale
-from idaes.core.util.tables import create_stream_table_dataframe
 
 from idaes.models.unit_models import (
     Mixer,
     Heater,
     HeatExchanger,
     PressureChanger,
-    Compressor,
     GibbsReactor,
-    StoichiometricReactor,
     Separator,
-    Translator,
     Feed,
     Product)
 from idaes.core.util.initialization import propagate_state
@@ -156,7 +152,6 @@ def set_atr_flowsheet_inputs(m):
 
     # recuperator conditions
 
-    #m.fs.reformer_recuperator.tube_outlet.temperature.fix(1010.93) # K
     m.fs.reformer_recuperator.area.fix(4190) # m2
     m.fs.reformer_recuperator.overall_heat_transfer_coefficient.fix(80) # W/m2K # it was 80e-3 # potential bug
 
@@ -165,7 +160,7 @@ def set_atr_flowsheet_inputs(m):
     m.fs.NG_expander.outlet.pressure.fix(203396) # Pa
     m.fs.NG_expander.efficiency_isentropic.fix(0.9)
 
-    # air conditions to reformer 
+    # air conditions 
 
     m.fs.air_compressor_s1.inlet.flow_mol.fix(1332.9)  # mol/s
     m.fs.air_compressor_s1.inlet.temperature.fix(288.15)  # K
@@ -197,7 +192,7 @@ def set_atr_flowsheet_inputs(m):
     m.fs.intercooler_s2.outlet.temperature.fix(310.93) # K
     m.fs.intercooler_s2.outlet.pressure.fix(203396) # Pa equivalent to a dP of -0.5 psi
 
-    # steam conditions to reformer
+    # steam conditions
 
     m.fs.reformer_mix.steam_inlet.flow_mol.fix(464.77) # mol/s
     m.fs.reformer_mix.steam_inlet.temperature.fix(422) # K
@@ -216,71 +211,85 @@ def set_atr_flowsheet_inputs(m):
 
     # reformer outlet pressure
 
-    m.fs.reformer.outlet.pressure[0].fix(137895)  # Pa because our Gibbs Reactor has pressure change
-
+    m.fs.reformer.outlet.pressure[0].fix(137895)  # Pa, our Gibbs Reactor has pressure change
 
 def initialize_atr_flowsheet(m):
     ####### PROPAGATE STATES #######
-    ####### This procedure was adapted from: https://idaes.github.io/examples-pse/latest/Tutorials/Basics/HDA_flowsheet_solution_doc.html
-    
-    seq = SequentialDecomposition()
-    seq.options.select_tear_method = "heuristic"
-    seq.options.tear_method = "Wegstein"
-    seq.options.iterLim = 3
 
-    G = seq.create_graph(m)
-    heuristic_tear_set = seq.tear_set_arcs(G, method="heuristic")
-    order = seq.calculation_order(G)
+    # initialize the reformer with random values.
+    # this is only to get a good set of initial values such that 
+    # IPOPT can then take over and solve this flowsheet for us.  
+   
+    m.fs.reformer.inlet.flow_mol[0] = 2262.5
+    m.fs.reformer.inlet.temperature[0] = 469.8  
+    m.fs.reformer.inlet.pressure[0] = 203395.9
+    m.fs.reformer.inlet.mole_frac_comp[0, 'CH4'] = 0.1912
+    m.fs.reformer.inlet.mole_frac_comp[0, 'C2H6'] = 0.0066
+    m.fs.reformer.inlet.mole_frac_comp[0, 'C3H8'] = 0.0014
+    m.fs.reformer.inlet.mole_frac_comp[0, 'C4H10'] = 0.0008
+    m.fs.reformer.inlet.mole_frac_comp[0, 'H2'] = 1e-5
+    m.fs.reformer.inlet.mole_frac_comp[0, 'CO'] = 1e-5
+    m.fs.reformer.inlet.mole_frac_comp[0, 'CO2'] = 0.0022
+    m.fs.reformer.inlet.mole_frac_comp[0, 'H2O'] = 0.2116
+    m.fs.reformer.inlet.mole_frac_comp[0, 'N2'] = 0.4582
+    m.fs.reformer.inlet.mole_frac_comp[0, 'O2'] = 0.1224
+    m.fs.reformer.inlet.mole_frac_comp[0, 'Ar'] = 0.0055
 
-    for o in heuristic_tear_set:
-        print(o.name) # this will give us the tear stream
+    m.fs.reformer.initialize() 
+    m.fs.reformer_recuperator.initialize()
+    m.fs.bypass_rejoin.initialize()
+    m.fs.product.initialize()
+    m.fs.reformer_mix.initialize()
+    m.fs.feed.initialize()         
+    m.fs.NG_expander.initialize()
+    m.fs.air_compressor_s1.initialize()    
+    m.fs.intercooler_s1.initialize()    
+    m.fs.air_compressor_s2.initialize()    
+    m.fs.intercooler_s2.initialize()    
+    m.fs.reformer_bypass.initialize()    
 
-    tear_guesses = {
-        "flow_mol_phase_comp": {
-                (0, "Vap", "CH4"): 0.931,
-                (0, "Vap", "C2H6"): 0.032,
-                (0, "Vap", "C3H8"): 0.007,
-                (0, "Vap", "C4H10"): 0.004,
-                (0, "Vap", "H2"): 1e-5,
-                (0, "Vap", "CO"): 1e-5,
-                (0, "Vap", "CO2"): 0.01,
-                (0, "Vap", "H2O"): 1e-5,
-                (0, "Vap", "N2"): 0.016,
-                (0, "Vap", "O2"): 1e-5,
-                (0, "Vap", "Ar"): 1e-5},
-        "temperature": {0: 700},
-        "pressure": {0: 3200000}}
+    propagate_state(arc=m.fs.RECUP_COLD_IN)
+    propagate_state(arc=m.fs.RECUP_COLD_OUT)
+    propagate_state(arc=m.fs.NG_EXPAND_OUT)
+    propagate_state(arc=m.fs.NG_TO_REF)
+    propagate_state(arc=m.fs.STAGE_1_OUT)
+    propagate_state(arc=m.fs.IC_1_OUT)
+    propagate_state(arc=m.fs.STAGE_2_OUT)
+    propagate_state(arc=m.fs.IC_2_OUT)
+    propagate_state(arc=m.fs.REF_IN)
+    propagate_state(arc=m.fs.REF_OUT)
+    propagate_state(arc=m.fs.RECUP_HOT_OUT)
+    propagate_state(arc=m.fs.REF_BYPASS)
+    propagate_state(arc=m.fs.PRODUCT)
 
-    seq.set_guesses_for(m.fs.NG_expander.inlet, tear_guesses)
-
-    def function(unit):
-        unit.initialize()
-
-    seq.run(m, function)
+    solver = get_solver()
+    solver.solve(m,tee=True)
 
 if __name__ == "__main__":
     m = pyo.ConcreteModel(name='ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
     build_atr_flowsheet(m)
-    # Uncomment this line below to visualize flowsheet
-    # m.fs.visualize("Auto-Thermal Reformer Flowsheet")
+    ####### Uncomment the line below to visualize flowsheet #######
+    # m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
     set_atr_flowsheet_inputs(m)
     initialize_atr_flowsheet(m)
     
-    ####### OBJECTIVE IS TO MAXIMIZE H2 CONCENTRATION IN PRODUCT STREAM
+    ####### OBJECTIVE IS TO MAXIMIZE H2 CONCENTRATION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(expr=(m.fs.product.mole_frac_comp[0, 'H2']),
                               sense=pyo.maximize)
+    
+    ####### CONSTRAINTS #######
+    
     @m.Constraint()
     def max_outlet_temp_reformer(m):
         return m.fs.reformer.outlet.temperature[0] <= 1000
 
     @m.Constraint()
     def max_outlet_temp_prod(m):
-        return m.fs.product.temperature[0] <= 800
+        return m.fs.product.temperature[0] <= 600
     
-    # Unfix DOF
-    m.fs.reformer.inlet.unfix()
-    m.fs.reformer_mix.steam_inlet.flow_mol.unfix() 
+    # Unfix D.O.F. If you unfix this variable, inlet temperature, flow and composition
+    # to the Gibbs reactor will have to be determined by the optimization problem. 
     m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet'].unfix() 
     
     solver = get_solver()
