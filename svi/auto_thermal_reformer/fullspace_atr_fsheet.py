@@ -352,6 +352,13 @@ def make_simulation_model(initialize=True):
 
 
 def make_optimization_model(initialize=True):
+    """
+    The optimization problem to solve is the following:
+
+    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
+    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
+    the maximum product temperature is 650 K.
+    """
     m = make_simulation_model(initialize=initialize)
 
     # TODO: Optionally solve the simulation model at this point so we start
@@ -411,13 +418,6 @@ def make_optimization_model(initialize=True):
 
 
 if __name__ == "__main__":
-    """
-    The optimization problem to solve is the following:
-
-    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
-    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
-    the maximum product temperature is 650 K.
-    """
     simulation = False
     optimization = not simulation
     visualize = False
