@@ -365,23 +365,11 @@ def make_implicit(m):
     input_vars.extend(m.outlet_mole_frac_comp.values())    
 
     external_eqns = list(igraph.constraints)
-    
-    external_vars = [var for var in igraph.variables if var is not m.fs.reformer.inlet.temperature[0]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "H2"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "CO"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "H2O"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "CO2"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "C2H6"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "C3H8"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "C4H10"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "N2"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "O2"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.mole_frac_comp[0, "Ar"]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.flow_mol[0]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.inlet.pressure[0]]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.lagrange_mult[0.0,'N']]
-    external_vars = [var for var in external_vars if var is not m.fs.reformer.lagrange_mult[0.0,'Ar']]
+
+    to_exclude = ComponentSet(input_vars)
+    to_exclude.add(m.fs.reformer.lagrange_mult[0, "N"])
+    to_exclude.add(m.fs.reformer.lagrange_mult[0, "Ar"])
+    external_vars = [var for var in igraph.variables if var not in to_exclude]
 
     external_var_set = ComponentSet(external_vars)
     external_eqn_set = ComponentSet(external_eqns)
