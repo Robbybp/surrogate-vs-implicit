@@ -101,7 +101,7 @@ def build_alamo_atr_flowsheet(alamo_surrogate_dict, conversion):
 
     m.fs.reformer = SurrogateBlock() 
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless) 
-    m.fs.reformer.conversion.fix(0.9) # ACHIEVE A CONVERSION OF 0.9 IN ATR
+    m.fs.reformer.conversion.fix(conversion) # ACHIEVE A CONVERSION OF 0.95 IN ATR
 
     # define the inputs to the surrogate models
     inputs = [m.fs.reformer_bypass.reformer_outlet.flow_mol[0], 
@@ -115,7 +115,7 @@ def build_alamo_atr_flowsheet(alamo_surrogate_dict, conversion):
                 m.fs.reformer_out_C3H8, m.fs.reformer_out_C4H10, m.fs.reformer_out_N2, m.fs.reformer_out_O2, m.fs.reformer_out_Ar]
 
     # build the surrogate for the Gibbs Reactor using the JSON file obtained before
-    surrogate = AlamoSurrogate.load_from_file("C:/Users/sbugo/surr-vs-imp/surrogate-vs-implicit/svi/auto_thermal_reformer/alamo_surrogate_atr.json")
+    surrogate = AlamoSurrogate.load_from_file(alamo_surrogate_dict)
     m.fs.reformer.build_model(surrogate, input_vars=inputs, output_vars=outputs)
 
     m.fs.bypass_rejoin = Mixer(
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     """
     m = pyo.ConcreteModel(name='ALAMO_ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
-    build_alamo_atr_flowsheet(alamo_surrogate_dict = "C:/Users/sbugo/surr-vs-imp/surrogate-vs-implicit/svi/auto_thermal_reformer/alamo_surrogate_atr.json", conversion=0.9)
+    build_alamo_atr_flowsheet(alamo_surrogate_dict = "C:/Users/sbugo/surr-vs-imp/surrogate-vs-implicit/svi/auto_thermal_reformer/alamo_surrogate_atr.json", conversion=0.95)
     set_alamo_atr_flowsheet_inputs(m)
     initialize_alamo_atr_flowsheet(m)
 
