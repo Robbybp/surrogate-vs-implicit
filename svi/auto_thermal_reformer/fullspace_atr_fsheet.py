@@ -52,6 +52,14 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 
+from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
+
+#
+# For debugging
+#
+from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
+
 
 def build_atr_flowsheet(m):
     ########## ADD THERMODYNAMIC PROPERTIES ##########
@@ -311,25 +319,44 @@ def initialize_atr_flowsheet(m):
     propagate_state(arc=m.fs.REF_BYPASS)
     propagate_state(arc=m.fs.PRODUCT)
 
-    # solver = get_solver()
-    # solver.solve(m,tee=True)
 
-
-if __name__ == "__main__":
-    """
-    The optimization problem to solve is the following:
-
-    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
-    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
-    the maximum product temperature is 650 K.
-    """
+def make_simulation_model(initialize=True):
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
     build_atr_flowsheet(m)
-    ####### Uncomment the line below to visualize flowsheet #######
-    # m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
     set_atr_flowsheet_inputs(m)
-    initialize_atr_flowsheet(m)
+    if initialize:
+        initialize_atr_flowsheet(m)
+
+    #
+    # Fix degrees of freedom for simulation model
+    # (Fix one variable, add one constraint)
+    #
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix()
+    m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
+    m.fs.reformer.conv_constraint = Constraint(
+        expr=m.fs.reformer.conversion
+        * m.fs.reformer.inlet.flow_mol[0]
+        * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+        == (
+            m.fs.reformer.inlet.flow_mol[0]
+            * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+            - m.fs.reformer.outlet.flow_mol[0]
+            * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
+        )
+    )
+    # Fix conversion to 0.95
+    m.fs.reformer.conversion.fix(0.95)
+
+    return m
+
+
+def make_optimization_model(initialize=True):
+    m = make_simulation_model(initialize=initialize)
+
+    # TODO: Optionally solve the simulation model at this point so we start
+    # the optimization problem with no primal infeasibility (other than due
+    # to any operational constraints we might impose).
 
     ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(
@@ -352,9 +379,8 @@ if __name__ == "__main__":
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    m.fs.reformer.conversion.fix(
-        0.95
-    )  # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
+    # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
+    m.fs.reformer.conversion.fix(0.95)
 
     # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
     @m.Constraint()
@@ -381,11 +407,55 @@ if __name__ == "__main__":
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
     m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
 
-    solver = get_solver()
-    solver.options = {"tol": 1e-8, "max_iter": 400}
-    solver.solve(m, tee=True)
+    return m
 
-    m.fs.reformer.report()
-    m.fs.reformer_recuperator.report()
-    m.fs.product.report()
-    m.fs.reformer_bypass.split_fraction.display()
+
+if __name__ == "__main__":
+    """
+    The optimization problem to solve is the following:
+
+    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
+    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
+    the maximum product temperature is 650 K.
+    """
+    simulation = False
+    optimization = not simulation
+    visualize = False
+
+    if optimization:
+        m = make_optimization_model()
+        #m.fs.reformer.conversion.fix(0.9999)
+
+        solver = get_solver()
+        solver.options = {"tol": 1e-8, "max_iter": 1000}
+        solver.solve(m, tee=True)
+
+        m.fs.reformer.report()
+        m.fs.reformer_recuperator.report()
+        m.fs.product.report()
+        m.fs.reformer_bypass.split_fraction.display()
+
+    if simulation:
+        m = make_simulation_model()
+        #m.fs.reformer.conversion.fix(0.9999)
+
+        # NOTE: This relies on recent Pyomo PRs
+        calc_var_kwds = dict(eps=1e-7)
+        solve_kwds = dict(tee=True)
+        solver = get_solver()
+        solver.options["max_iter"] = 1000
+        solve_strongly_connected_components(
+            m,
+            solver=solver,
+            calc_var_kwds=calc_var_kwds,
+            solve_kwds=solve_kwds,
+        )
+        solver.solve(m, tee=True)
+
+        m.fs.reformer.report()
+        m.fs.reformer_recuperator.report()
+        m.fs.product.report()
+        m.fs.reformer_bypass.split_fraction.display()
+
+    if visualize:
+        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
