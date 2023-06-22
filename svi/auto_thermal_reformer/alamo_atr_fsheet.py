@@ -20,6 +20,7 @@
 #  ___________________________________________________________________________
 
 ######## IMPORT PACKAGES ########
+import os
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -131,20 +132,21 @@ def build_alamo_atr_flowsheet(alamo_surrogate_dict, conversion):
 
     ########## CONNECT OUTPUTS OF SURROGATE TO RECUPERATOR SHELL INLET ##########  
 
-    m.fs.reformer_recuperator.shell_inlet.flow_mol.fix(value(m.fs.reformer_out_flow_mol))
-    m.fs.reformer_recuperator.shell_inlet.temperature.fix(value(m.fs.reformer_out_temp))
-    m.fs.reformer_recuperator.shell_inlet.pressure.fix(137895)
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].fix(value(m.fs.reformer_out_H2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'].fix(value(m.fs.reformer_out_CO))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'].fix(value(m.fs.reformer_out_H2O))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'].fix(value(m.fs.reformer_out_CO2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'].fix(value(m.fs.reformer_out_CH4))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'].fix(value(m.fs.reformer_out_C2H6))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'].fix(value(m.fs.reformer_out_C3H8))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'].fix(value(m.fs.reformer_out_C4H10))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'].fix(value(m.fs.reformer_out_N2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'].fix(value(m.fs.reformer_out_O2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'].fix(value(m.fs.reformer_out_Ar))
+    m.fs.reformer_recuperator.shell_inlet.pressure[0].fix(137895)
+
+    m.fs.reformer_recuperator.shell_inlet.flow_mol[0].set_value(value(m.fs.reformer_out_flow_mol))
+    m.fs.reformer_recuperator.shell_inlet.temperature[0].set_value(value(m.fs.reformer_out_temp))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].set_value(value(m.fs.reformer_out_H2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'].set_value(value(m.fs.reformer_out_CO))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'].set_value(value(m.fs.reformer_out_H2O))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'].set_value(value(m.fs.reformer_out_CO2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'].set_value(value(m.fs.reformer_out_CH4))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'].set_value(value(m.fs.reformer_out_C2H6))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'].set_value(value(m.fs.reformer_out_C3H8))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'].set_value(value(m.fs.reformer_out_C4H10))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'].set_value(value(m.fs.reformer_out_N2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'].set_value(value(m.fs.reformer_out_O2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'].set_value(value(m.fs.reformer_out_Ar))
 
     ########## CONNECT UNIT MODELS DOWNSTREAM OF SURROGATE REFORMER ##########  
 
@@ -235,7 +237,10 @@ if __name__ == "__main__":
     """
     m = pyo.ConcreteModel(name='ALAMO_ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
-    build_alamo_atr_flowsheet(alamo_surrogate_dict = "C:/Users/sbugo/surr-vs-imp/surrogate-vs-implicit/svi/auto_thermal_reformer/alamo_surrogate_atr.json", conversion=0.95)
+    dirname = os.path.dirname(__file__)
+    basename = "alamo_surrogate_atr.json"
+    fname = os.path.join(dirname, basename)
+    build_alamo_atr_flowsheet(alamo_surrogate_dict=fname, conversion=0.95)
     set_alamo_atr_flowsheet_inputs(m)
     initialize_alamo_atr_flowsheet(m)
 
@@ -243,22 +248,6 @@ if __name__ == "__main__":
     m.fs.obj = pyo.Objective(expr = m.fs.product.mole_frac_comp[0, 'H2'], sense = pyo.maximize)
         
     ####### CONSTRAINTS #######
-
-    # First, unfix these variables. They were fixed before so we could build an initial flowsheet.
-
-    m.fs.reformer_recuperator.shell_inlet.flow_mol.unfix()
-    m.fs.reformer_recuperator.shell_inlet.temperature.unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'].unfix()
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'].unfix()
 
     # Link outputs of ALAMO to inputs of reformer_recuperator 
     @m.Constraint()
