@@ -53,6 +53,7 @@ from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
+from pyomo.util.subsystems import TemporarySubsystemManager
 
 #
 # For debugging
@@ -426,8 +427,29 @@ if __name__ == "__main__":
         m = make_optimization_model()
         #m.fs.reformer.conversion.fix(0.9999)
 
+        #
+        # Initialize square model
+        #
+        to_fix = [
+            m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"],
+            m.fs.reformer_mix.steam_inlet.flow_mol[0],
+        ]
+        with TemporarySubsystemManager(to_fix=to_fix):
+            calc_var_kwds = dict(eps=1e-7)
+            solve_kwds = dict(tee=True)
+            solver = get_solver()
+            solver.options["max_iter"] = 1000
+            solve_strongly_connected_components(
+                m,
+                solver=solver,
+                calc_var_kwds=calc_var_kwds,
+                solve_kwds=solve_kwds,
+            )
+        ###
+
         solver = get_solver()
         solver.options = {"tol": 1e-8, "max_iter": 1000}
+
         solver.solve(m, tee=True)
 
         m.fs.reformer.report()
