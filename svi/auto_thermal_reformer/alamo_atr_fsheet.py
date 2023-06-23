@@ -53,7 +53,7 @@ from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_
 from idaes.core.surrogate.alamopy import AlamoSurrogate
 from idaes.core.surrogate.surrogate_block import SurrogateBlock
 
-def build_alamo_atr_flowsheet(alamo_surrogate_dict, conversion):
+def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
    ########## ADD THERMODYNAMIC PROPERTIES ##########  
     components = ['H2', 'CO', "H2O", 'CO2', 'CH4', "C2H6", "C3H8", "C4H10",'N2', 'O2', 'Ar']
     thermo_props_config_dict = get_prop(components = components)
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     dirname = os.path.dirname(__file__)
     basename = "alamo_surrogate_atr.json"
     fname = os.path.join(dirname, basename)
-    build_alamo_atr_flowsheet(alamo_surrogate_dict=fname, conversion=0.95)
+    build_alamo_atr_flowsheet(m,alamo_surrogate_dict=fname, conversion=0.95)
     set_alamo_atr_flowsheet_inputs(m)
     initialize_alamo_atr_flowsheet(m)
 
@@ -330,7 +330,7 @@ if __name__ == "__main__":
     solver = get_solver()
     solver.options = {
         "tol": 1e-8,
-        "max_iter": 400
+        "max_iter": 1000
     }
     solver.solve(m, tee=True)
     m.fs.product.report()
