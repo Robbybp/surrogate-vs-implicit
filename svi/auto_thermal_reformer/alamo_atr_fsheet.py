@@ -81,28 +81,28 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
         outlet_list = ["reformer_outlet", "bypass_outlet"],
         property_package = m.fs.thermo_params)
 
-    ########## CREATE OUTLET VARS FOR ATR SURROGATE ##########
-
-    m.fs.reformer_heat_duty = Var(initialize = 43262357) # W
-    m.fs.reformer_out_flow_mol = Var(initialize = 3217) # mol/s
-    m.fs.reformer_out_temp = Var(initialize = 998.8) # K
-    m.fs.reformer_out_H2 = Var(initialize = 0.415311)
-    m.fs.reformer_out_CO = Var(initialize = 0.169659)
-    m.fs.reformer_out_H2O = Var(initialize = 0.042004)
-    m.fs.reformer_out_CO2 = Var(initialize = 0.024803)
-    m.fs.reformer_out_CH4 = Var(initialize = 0.021087)
-    m.fs.reformer_out_C2H6 = Var(initialize = 0.000000194)
-    m.fs.reformer_out_C3H8 = Var(initialize = 0.00000000000705)
-    m.fs.reformer_out_C4H10 = Var(initialize = 0.000000000000000241)
-    m.fs.reformer_out_N2 = Var(initialize = 0.323243566)
-    m.fs.reformer_out_O2 = Var(initialize = 1e-19)
-    m.fs.reformer_out_Ar = Var(initialize = 0.003892586)
-
     ########## DEFINE SURROGATE BLOCK FOR THE ATR ##########
 
     m.fs.reformer = SurrogateBlock() 
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless) 
     m.fs.reformer.conversion.fix(conversion) # ACHIEVE A CONVERSION OF 0.95 IN ATR
+
+    ########## CREATE OUTLET VARS FOR ATR SURROGATE ##########
+
+    m.fs.reformer.heat_duty = Var(initialize = 43262357) # W
+    m.fs.reformer.out_flow_mol = Var(initialize = 3217) # mol/s
+    m.fs.reformer.out_temp = Var(initialize = 998.8) # K
+    m.fs.reformer.out_H2 = Var(initialize = 0.415311)
+    m.fs.reformer.out_CO = Var(initialize = 0.169659)
+    m.fs.reformer.out_H2O = Var(initialize = 0.042004)
+    m.fs.reformer.out_CO2 = Var(initialize = 0.024803)
+    m.fs.reformer.out_CH4 = Var(initialize = 0.021087)
+    m.fs.reformer.out_C2H6 = Var(initialize = 0.000000194)
+    m.fs.reformer.out_C3H8 = Var(initialize = 0.00000000000705)
+    m.fs.reformer.out_C4H10 = Var(initialize = 0.000000000000000241)
+    m.fs.reformer.out_N2 = Var(initialize = 0.323243566)
+    m.fs.reformer.out_O2 = Var(initialize = 1e-19)
+    m.fs.reformer.out_Ar = Var(initialize = 0.003892586)
 
     # define the inputs to the surrogate models
     inputs = [m.fs.reformer_bypass.reformer_outlet.flow_mol[0], 
@@ -111,9 +111,9 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
                 m.fs.reformer.conversion]
 
     # define the outputs of the surrogate models
-    outputs = [m.fs.reformer_heat_duty, m.fs.reformer_out_flow_mol, m.fs.reformer_out_temp, m.fs.reformer_out_H2,
-                m.fs.reformer_out_CO, m.fs.reformer_out_H2O, m.fs.reformer_out_CO2, m.fs.reformer_out_CH4, m.fs.reformer_out_C2H6,
-                m.fs.reformer_out_C3H8, m.fs.reformer_out_C4H10, m.fs.reformer_out_N2, m.fs.reformer_out_O2, m.fs.reformer_out_Ar]
+    outputs = [m.fs.reformer.heat_duty, m.fs.reformer.out_flow_mol, m.fs.reformer.out_temp, m.fs.reformer.out_H2,
+                m.fs.reformer.out_CO, m.fs.reformer.out_H2O, m.fs.reformer.out_CO2, m.fs.reformer.out_CH4, m.fs.reformer.out_C2H6,
+                m.fs.reformer.out_C3H8, m.fs.reformer.out_C4H10, m.fs.reformer.out_N2, m.fs.reformer.out_O2, m.fs.reformer.out_Ar]
 
     # build the surrogate for the Gibbs Reactor using the JSON file obtained before
     surrogate = AlamoSurrogate.load_from_file(alamo_surrogate_dict)
@@ -134,19 +134,19 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
 
     m.fs.reformer_recuperator.shell_inlet.pressure[0].fix(137895)
 
-    m.fs.reformer_recuperator.shell_inlet.flow_mol[0].set_value(value(m.fs.reformer_out_flow_mol))
-    m.fs.reformer_recuperator.shell_inlet.temperature[0].set_value(value(m.fs.reformer_out_temp))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].set_value(value(m.fs.reformer_out_H2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'].set_value(value(m.fs.reformer_out_CO))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'].set_value(value(m.fs.reformer_out_H2O))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'].set_value(value(m.fs.reformer_out_CO2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'].set_value(value(m.fs.reformer_out_CH4))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'].set_value(value(m.fs.reformer_out_C2H6))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'].set_value(value(m.fs.reformer_out_C3H8))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'].set_value(value(m.fs.reformer_out_C4H10))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'].set_value(value(m.fs.reformer_out_N2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'].set_value(value(m.fs.reformer_out_O2))
-    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'].set_value(value(m.fs.reformer_out_Ar))
+    m.fs.reformer_recuperator.shell_inlet.flow_mol[0].set_value(value(m.fs.reformer.out_flow_mol))
+    m.fs.reformer_recuperator.shell_inlet.temperature[0].set_value(value(m.fs.reformer.out_temp))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].set_value(value(m.fs.reformer.out_H2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'].set_value(value(m.fs.reformer.out_CO))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'].set_value(value(m.fs.reformer.out_H2O))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'].set_value(value(m.fs.reformer.out_CO2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'].set_value(value(m.fs.reformer.out_CH4))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'].set_value(value(m.fs.reformer.out_C2H6))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'].set_value(value(m.fs.reformer.out_C3H8))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'].set_value(value(m.fs.reformer.out_C4H10))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'].set_value(value(m.fs.reformer.out_N2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'].set_value(value(m.fs.reformer.out_O2))
+    m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'].set_value(value(m.fs.reformer.out_Ar))
 
     ########## CONNECT UNIT MODELS DOWNSTREAM OF SURROGATE REFORMER ##########  
 
@@ -252,55 +252,55 @@ if __name__ == "__main__":
     # Link outputs of ALAMO to inputs of reformer_recuperator 
     @m.Constraint()
     def link_T(m):
-        return m.fs.reformer_recuperator.shell_inlet.flow_mol[0] == m.fs.reformer_out_flow_mol
+        return m.fs.reformer_recuperator.shell_inlet.flow_mol[0] == m.fs.reformer.out_flow_mol
 
     @m.Constraint()
     def link_F(m):
-        return m.fs.reformer_recuperator.shell_inlet.temperature[0] == m.fs.reformer_out_temp
+        return m.fs.reformer_recuperator.shell_inlet.temperature[0] == m.fs.reformer.out_temp
 
     @m.Constraint()
     def link_H2(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'] == m.fs.reformer_out_H2
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'] == m.fs.reformer.out_H2
 
     @m.Constraint()
     def link_CO(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'] == m.fs.reformer_out_CO
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'] == m.fs.reformer.out_CO
 
     @m.Constraint()
     def link_H2O(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'] == m.fs.reformer_out_H2O
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'] == m.fs.reformer.out_H2O
 
     @m.Constraint()
     def link_CO2(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'] == m.fs.reformer_out_CO2
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'] == m.fs.reformer.out_CO2
 
     @m.Constraint()
     def link_CH4(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'] == m.fs.reformer_out_CH4
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'] == m.fs.reformer.out_CH4
 
     @m.Constraint()
     def link_C2H6(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] == m.fs.reformer_out_C2H6
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] == m.fs.reformer.out_C2H6
 
     @m.Constraint()
     def link_C3H8(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] == m.fs.reformer_out_C3H8
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] == m.fs.reformer.out_C3H8
 
     @m.Constraint()
     def link_C4H10(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] == m.fs.reformer_out_C4H10
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] == m.fs.reformer.out_C4H10
 
     @m.Constraint()
     def link_N2(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'] == m.fs.reformer_out_N2
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'] == m.fs.reformer.out_N2
 
     @m.Constraint()
     def link_O2(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'] == m.fs.reformer_out_O2
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'] == m.fs.reformer.out_O2
 
     @m.Constraint()
     def link_Ar(m):
-        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer_out_Ar
+        return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer.out_Ar
 
     # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
     @m.Constraint()
@@ -315,7 +315,7 @@ if __name__ == "__main__":
     # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
     @m.Constraint()
     def max_reformer_outlet_temp(m):
-        return m.fs.reformer_out_temp <= 1200
+        return m.fs.reformer.out_temp <= 1200
 
     # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
     @m.Constraint()
