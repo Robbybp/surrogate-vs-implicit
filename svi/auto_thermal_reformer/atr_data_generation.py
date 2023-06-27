@@ -151,7 +151,7 @@ def atr_data_gen(num_samples):
                 )
             )
 
-            conv = random.uniform(0.8, 0.95)
+            conv = random.uniform(0.8, 0.96)
             m.fs.R101.conversion.fix(conv)
 
             ######### SOLVE #########
