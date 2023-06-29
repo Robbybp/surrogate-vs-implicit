@@ -353,4 +353,4 @@ if __name__ == "__main__":
 
 
 df = pd.DataFrame(df)
-df.to_csv('param_sweep_alamo_atr.csv')
+df.to_csv('alamo_param_sweep_conv94.csv')
