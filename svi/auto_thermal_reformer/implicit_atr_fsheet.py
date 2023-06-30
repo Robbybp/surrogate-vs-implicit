@@ -54,11 +54,14 @@ from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
+from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
+    CyIpoptSolverWrapper
+)
 
 from svi.external import add_external_function_libraries_to_environment
 
 
-def build_atr_flowsheet(conversion):
+def _build_atr_flowsheet(conversion):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(dynamic=False)
 
@@ -345,7 +348,11 @@ def build_atr_flowsheet(conversion):
     # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
     @m.Constraint()
     def max_reformer_outlet_temp(m):
-        return m.fs.reformer.outlet.temperature[0] <= 1200
+        #return m.fs.reformer.outlet.temperature[0] <= 1200
+        #
+        # Define this constraint in terms of the recuperator's inlet as reformer
+        # outlet temperature will be treated implicitly.
+        return m.fs.reformer_recuperator.hot_side_inlet.temperature[0] <= 1200.0
 
     # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
     @m.Constraint()
@@ -365,38 +372,15 @@ def build_atr_flowsheet(conversion):
 
 def make_implicit(m):
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
-    igraph = IncidenceGraphInterface(m.fs.reformer, include_inequality=False)
+    full_igraph = IncidenceGraphInterface(m)
+    reformer_igraph = IncidenceGraphInterface(m.fs.reformer, include_inequality=False)
 
-    m.outlet_mole_frac_comp = Var(m.fs.thermo_params.component_list)
-    for j in m.fs.thermo_params.component_list:
-        m.outlet_mole_frac_comp[j] = m.fs.reformer.outlet.mole_frac_comp[0, j]
-
-    m.outlet_temperature = Var(initialize=m.fs.reformer.outlet.temperature[0].value)
-    m.heatDuty = Var(initialize=m.fs.reformer.heat_duty[0].value)
-    m.outlet_flow_mol = Var(initialize=m.fs.reformer.outlet.flow_mol[0].value)
-
-    @m.Constraint(m.fs.thermo_params.component_list)
-    def outlet_mole_frac_comp_eq(m, j):
-        return m.outlet_mole_frac_comp[j] == m.fs.reformer.outlet.mole_frac_comp[0, j]
-
-    @m.Constraint()
-    def outlet_temperature_eq(m):
-        return m.outlet_temperature == m.fs.reformer.outlet.temperature[0]
-
-    @m.Constraint()
-    def heatDuty_eq(m):
-        return m.heatDuty == m.fs.reformer.heat_duty[0]
-
-    @m.Constraint()
-    def outlet_flow_mol_eq(m):
-        return m.outlet_flow_mol == m.fs.reformer.outlet.flow_mol[0]
-
-    residual_eqns = [
-        m.outlet_temperature_eq,
-        m.heatDuty_eq,
-        m.outlet_flow_mol_eq,
-    ]
-    residual_eqns.extend(m.outlet_mole_frac_comp_eq.values())
+    # Pressure is not an "external variable" (it is fixed), so the pressure
+    # linking equation doesn't need to be included as "residual"
+    to_exclude = ComponentSet([m.fs.REF_OUT_expanded.pressure_equality[0]])
+    residual_eqns = list(
+        m.fs.REF_OUT_expanded.component_data_objects(pyo.Constraint, active=True)
+    )
 
     input_vars = [
         m.fs.reformer.inlet.temperature[0],
@@ -413,29 +397,47 @@ def make_implicit(m):
         m.fs.reformer.inlet.mole_frac_comp[0, "Ar"],
         m.fs.reformer.inlet.flow_mol[0],
         m.fs.reformer.inlet.pressure[0],
-        m.outlet_temperature,
-        m.heatDuty,
-        m.outlet_flow_mol,
+
+        #m.outlet_temperature,
+        #m.heatDuty,
+        #m.outlet_flow_mol,
+        m.fs.reformer_recuperator.hot_side_inlet.temperature[0],
+        m.fs.reformer_recuperator.hot_side_inlet.flow_mol[0],
+        # Note that heat_duty is not necessary as it does not appear elsewhere
+        # in the model
+        #
+        # Note that pressure is not an "input" as the pressure linking equation
+        # is not residual (because the reactor's outlet pressure is fixed)
+        #m.fs.reformer_recuperator.hot_side_inlet.pressure[0],
     ]
 
-    input_vars.extend(m.outlet_mole_frac_comp.values())
+    #input_vars.extend(m.outlet_mole_frac_comp.values())
+    input_vars.extend(m.fs.reformer_recuperator.hot_side_inlet.mole_frac_comp[0, :])
 
-    external_eqns = list(igraph.constraints)
+    external_eqns = list(reformer_igraph.constraints)
 
     to_exclude = ComponentSet(input_vars)
     to_exclude.add(m.fs.reformer.lagrange_mult[0, "N"])
     to_exclude.add(m.fs.reformer.lagrange_mult[0, "Ar"])
-    external_vars = [var for var in igraph.variables if var not in to_exclude]
+    external_vars = [var for var in reformer_igraph.variables if var not in to_exclude]
 
     external_var_set = ComponentSet(external_vars)
     external_eqn_set = ComponentSet(external_eqns)
     residual_eqn_set = ComponentSet(residual_eqns)
+
+    # Bounds on variables in the implicit function can lead to
+    # undefined derivatives
+    for var in external_vars:
+        var.setlb(None)
+        var.setub(None)
 
     epm = ExternalPyomoModel(
         input_vars,
         external_vars,
         residual_eqns,
         external_eqns,
+        # This forces us to use CyIpopt for the inner Newton solver
+        solver_options=dict(solver_class=CyIpoptSolverWrapper),
     )
 
     ########### CONNECT FLOWSHEET TO THE IMPLICIT AUTOTHERMAL REFORMER ###########
@@ -444,114 +446,66 @@ def make_implicit(m):
     m_implicit.egb = ExternalGreyBoxBlock()
     m_implicit.egb.set_external_model(epm, inputs=input_vars)
 
-    # Link the outlet of reformer_mix to the inlet of the autothermal reformer
-    @m_implicit.Constraint()
-    def linking_T_to_egb(m_implicit):
-        return m.fs.reformer_mix.outlet.temperature[0] == m_implicit.egb.inputs[0]
-
-    @m_implicit.Constraint()
-    def linking_H2_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "H2"] == m_implicit.egb.inputs[1]
-        )
-
-    @m_implicit.Constraint()
-    def linking_CO_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "CO"] == m_implicit.egb.inputs[2]
-        )
-
-    @m_implicit.Constraint()
-    def linking_H2O_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "H2O"]
-            == m_implicit.egb.inputs[3]
-        )
-
-    @m_implicit.Constraint()
-    def linking_CO2_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "CO2"]
-            == m_implicit.egb.inputs[4]
-        )
-
-    @m_implicit.Constraint()
-    def linking_CH4_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "CH4"]
-            == m_implicit.egb.inputs[5]
-        )
-
-    @m_implicit.Constraint()
-    def linking_C2H6_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "C2H6"]
-            == m_implicit.egb.inputs[6]
-        )
-
-    @m_implicit.Constraint()
-    def linking_C3H8_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "C3H8"]
-            == m_implicit.egb.inputs[7]
-        )
-
-    @m_implicit.Constraint()
-    def linking_C4H10_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "C4H10"]
-            == m_implicit.egb.inputs[8]
-        )
-
-    @m_implicit.Constraint()
-    def linking_N2_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "N2"] == m_implicit.egb.inputs[9]
-        )
-
-    @m_implicit.Constraint()
-    def linking_O2_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "O2"]
-            == m_implicit.egb.inputs[10]
-        )
-
-    @m_implicit.Constraint()
-    def linking_Ar_to_egb(m_implicit):
-        return (
-            m.fs.reformer_mix.outlet.mole_frac_comp[0, "Ar"]
-            == m_implicit.egb.inputs[11]
-        )
-
-    @m_implicit.Constraint()
-    def linking_flow_to_egb(m_implicit):
-        return m.fs.reformer_mix.outlet.flow_mol[0] == m_implicit.egb.inputs[12]
-
-    @m_implicit.Constraint()
-    def linking_P_to_egb(m_implicit):
-        return m.fs.reformer_mix.outlet.pressure[0] == m_implicit.egb.inputs[13]
-
-    full_igraph = IncidenceGraphInterface(m)
     fullspace_cons = [
         con
         for con in full_igraph.constraints
         if con not in residual_eqn_set and con not in external_eqn_set
     ]
+
     fullspace_vars = [
         var for var in full_igraph.variables if var not in external_var_set
     ]
 
     m_implicit.fullspace_cons = pyo.Reference(fullspace_cons)
     m_implicit.fullspace_vars = pyo.Reference(fullspace_vars)
+    m_implicit.objective = pyo.Reference([m.fs.obj])
 
-    m_implicit.objective = pyo.Reference(m.fs.obj)
-
-    solver = pyo.SolverFactory("cyipopt")
-    solver.solve(m_implicit, tee=True)
-    return m_implicit.objective.value
+    return m_implicit
 
 
 if __name__ == "__main__":
-    m = build_atr_flowsheet(conversion=0.9)
+    from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
+    #m = build_atr_flowsheet(conversion=0.9)
+    m = make_optimization_model()
+
+    #
+    # Initialize the flowsheet by solving the square system
+    #
+    from pyomo.util.subsystems import TemporarySubsystemManager
+    from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
+    print("INITIALIZING FLOWSHEET WITH SQUARE SOLVE")
+    to_fix = [
+        m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"],
+        m.fs.reformer_mix.steam_inlet.flow_mol[0],
+    ]
+    calc_var_kwds = dict(eps=1e-7)
+    solve_kwds = dict(tee=True)
+    solver = pyo.SolverFactory("ipopt")
+    with TemporarySubsystemManager(to_fix=to_fix):
+        solve_strongly_connected_components(
+            m,
+            solver=solver,
+            calc_var_kwds=calc_var_kwds,
+            solve_kwds=solve_kwds,
+        )
+    print("END SQUARE SOLVE OF FULL FLOWSHEET")
+    ####
+
+    ## Initialize implicit function optimization problem to the solution...
+    #solver.solve(m, tee=True)
+
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
+
+    #from pyomo.contrib.pynumero.algorithms.solvers.callbacks import (
+    #    InfeasibilityCallback
+    #)
+    #callback = InfeasibilityCallback()
+    #import logging
+    #logging.basicConfig(level=logging.INFO)
+    solver = pyo.SolverFactory(
+        "cyipopt",
+        #intermediate_callback=callback,
+        #options=dict(bound_push=1e-8),
+    )
+    solver.solve(m_implicit, tee=True)
