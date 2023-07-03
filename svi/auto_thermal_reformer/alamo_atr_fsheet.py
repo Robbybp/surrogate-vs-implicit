@@ -270,12 +270,6 @@ def make_optimization_model(m):
     return m
 
 if __name__ == "__main__":
-    """
-    The optimization problem to solve is the following:
-    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s, 
-    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and 
-    the maximum product temperature is 650 K.
-    """
     m = pyo.ConcreteModel(name='ALAMO_ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
     
@@ -287,9 +281,6 @@ if __name__ == "__main__":
     set_alamo_atr_flowsheet_inputs(m)
     initialize_alamo_atr_flowsheet(m)
     make_optimization_model(m)
-
-    ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
-    m.fs.obj = pyo.Objective(expr = m.fs.product.mole_frac_comp[0, 'H2'], sense = pyo.maximize)
         
     ####### CONSTRAINTS #######
 
