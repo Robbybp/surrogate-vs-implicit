@@ -228,6 +228,47 @@ def initialize_alamo_atr_flowsheet(m):
     m.fs.product.initialize()
     propagate_state(arc=m.fs.PRODUCT)
 
+def make_optimization_model(m):
+    """
+    The optimization problem to solve is the following:
+
+    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
+    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
+    the maximum product temperature is 650 K.
+    """
+
+    ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
+    m.fs.obj = pyo.Objective(
+        expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
+    )
+
+    # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
+    @m.Constraint()
+    def min_product_flow_mol(m):
+        return m.fs.product.flow_mol[0] >= 3500
+
+    # MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
+    @m.Constraint()
+    def max_product_N2_comp(m):
+        return m.fs.product.mole_frac_comp[0, "N2"] <= 0.3
+
+    # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
+    @m.Constraint()
+    def max_reformer_outlet_temp(m):
+        return m.fs.reformer_recuperator.hot_side_inlet.temperature[0] <= 1200
+
+    # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
+    @m.Constraint()
+    def max_product_temp(m):
+        return m.fs.product.temperature[0] <= 650
+
+    # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
+    # to the Gibbs reactor will have to be determined by the optimization problem.
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
+    m.fs.steam_feed.flow_mol.unfix()
+
+    return m
+
 if __name__ == "__main__":
     """
     The optimization problem to solve is the following:
@@ -237,12 +278,15 @@ if __name__ == "__main__":
     """
     m = pyo.ConcreteModel(name='ALAMO_ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
+    
     dirname = os.path.dirname(__file__)
     basename = "alamo_surrogate_atr.json"
     fname = os.path.join(dirname, basename)
+    
     build_alamo_atr_flowsheet(m,alamo_surrogate_dict=fname, conversion=0.95)
     set_alamo_atr_flowsheet_inputs(m)
     initialize_alamo_atr_flowsheet(m)
+    make_optimization_model(m)
 
     ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(expr = m.fs.product.mole_frac_comp[0, 'H2'], sense = pyo.maximize)
@@ -301,32 +345,7 @@ if __name__ == "__main__":
     @m.Constraint()
     def link_Ar(m):
         return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer.out_Ar
-
-    # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
-    @m.Constraint()
-    def min_product_flow_mol(m):
-        return m.fs.product.flow_mol[0] >= 3500
-
-    # MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
-    @m.Constraint()
-    def max_product_N2_comp(m):
-        return m.fs.product.mole_frac_comp[0, 'N2'] <= 0.3
-
-    # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
-    @m.Constraint()
-    def max_reformer_outlet_temp(m):
-        return m.fs.reformer.out_temp <= 1200
-
-    # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
-    @m.Constraint()
-    def max_product_temp(m):
-        return m.fs.product.temperature[0] <= 650
-
-    # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
-    # to the ATR will have to be determined by the optimization problem. 
-    m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet'].unfix() 
-    m.fs.steam_feed.flow_mol.unfix() 
-
+    
     solver = get_solver()
     solver.options = {
         "tol": 1e-8,
