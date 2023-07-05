@@ -378,9 +378,12 @@ def make_implicit(m):
     # Pressure is not an "external variable" (it is fixed), so the pressure
     # linking equation doesn't need to be included as "residual"
     to_exclude = ComponentSet([m.fs.REF_OUT_expanded.pressure_equality[0]])
-    residual_eqns = list(
-        m.fs.REF_OUT_expanded.component_data_objects(pyo.Constraint, active=True)
-    )
+    residual_eqns = [
+        con for con in m.fs.REF_OUT_expanded.component_data_objects(
+            pyo.Constraint, active=True
+        )
+        if con not in to_exclude
+    ]
 
     input_vars = [
         m.fs.reformer.inlet.temperature[0],
@@ -427,9 +430,10 @@ def make_implicit(m):
 
     # Bounds on variables in the implicit function can lead to
     # undefined derivatives
-    for var in external_vars:
+    for i, var in enumerate(external_vars):
         var.setlb(None)
         var.setub(None)
+        var.domain = pyo.Reals
 
     epm = ExternalPyomoModel(
         input_vars,
@@ -437,7 +441,7 @@ def make_implicit(m):
         residual_eqns,
         external_eqns,
         # This forces us to use CyIpopt for the inner Newton solver
-        solver_options=dict(solver_class=CyIpoptSolverWrapper),
+        #solver_options=dict(solver_class=CyIpoptSolverWrapper),
     )
 
     ########### CONNECT FLOWSHEET TO THE IMPLICIT AUTOTHERMAL REFORMER ###########
@@ -463,7 +467,7 @@ def make_implicit(m):
     return m_implicit
 
 
-if __name__ == "__main__":
+def main():
     from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
     #m = build_atr_flowsheet(conversion=0.9)
     m = make_optimization_model()
@@ -509,3 +513,8 @@ if __name__ == "__main__":
         #options=dict(bound_push=1e-8),
     )
     solver.solve(m_implicit, tee=True)
+    m.fs.reformer_bypass.split_fraction.pprint()
+
+
+if __name__ == "__main__":
+    main()
