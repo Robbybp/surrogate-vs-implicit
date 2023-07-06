@@ -50,7 +50,6 @@ from idaes.models_extra.power_generation.properties.natural_gas_PR import get_pr
 from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
-from idaes.core.surrogate.alamopy import AlamoSurrogate
 from idaes.core.surrogate.surrogate_block import SurrogateBlock
 from idaes.core.surrogate.sampling.data_utils import split_training_validation
 from idaes.core.surrogate.sampling.scaling import OffsetScaler
@@ -60,7 +59,7 @@ from idaes.core.surrogate.keras_surrogate import (
     load_keras_json_hd5,
 )
 
-def build_alamo_atr_flowsheet(m, conversion):
+def build_nn_atr_flowsheet(m, conversion):
    ########## ADD THERMODYNAMIC PROPERTIES ##########  
     components = ['H2', 'CO', "H2O", 'CO2', 'CH4', "C2H6", "C3H8", "C4H10",'N2', 'O2', 'Ar']
     thermo_props_config_dict = get_prop(components = components)
@@ -117,12 +116,13 @@ def build_alamo_atr_flowsheet(m, conversion):
                 m.fs.steam_feed.flow_mol[0],
                 m.fs.reformer.conversion]
 
-    # define the outputs of the surrogate models
+    # define the outputs of the surrogate models. remove O2, C2H6, C3H8, C4H10 
+    # because they were not part of the NN training.
     outputs = [m.fs.reformer.heat_duty, m.fs.reformer.out_flow_mol, m.fs.reformer.out_temp, m.fs.reformer.out_H2,
                 m.fs.reformer.out_CO, m.fs.reformer.out_H2O, m.fs.reformer.out_CO2, m.fs.reformer.out_CH4,
                 m.fs.reformer.out_N2, m.fs.reformer.out_Ar]
 
-    # build the surrogate for the Gibbs Reactor using the JSON file obtained before
+    # build the surrogate for the Gibbs Reactor using the best keras model obtained
     keras_surrogate = KerasSurrogate.load_from_folder("keras_surrogate")
     m.fs.reformer.build_model(
     keras_surrogate,
@@ -170,7 +170,7 @@ def build_alamo_atr_flowsheet(m, conversion):
 
     pyo.TransformationFactory("network.expand_arcs").apply_to(m.fs)
 
-def set_alamo_atr_flowsheet_inputs(m):
+def set_nn_atr_flowsheet_inputs(m):
     # natural gas feed conditions
 
     m.fs.feed.outlet.flow_mol.fix(1161.9)  # mol/s
@@ -219,7 +219,7 @@ def set_alamo_atr_flowsheet_inputs(m):
 
     m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet'].fix(0.23)
 
-def initialize_alamo_atr_flowsheet(m):
+def initialize_nn_atr_flowsheet(m):
     ########## INITIALIZE AND PROPAGATE STATES ##########
     
     m.fs.feed.initialize()    
@@ -285,9 +285,9 @@ if __name__ == "__main__":
     m = pyo.ConcreteModel(name='NN_ATR_Flowsheet')
     m.fs = FlowsheetBlock(dynamic = False)
     
-    build_alamo_atr_flowsheet(m, conversion=0.94)
-    set_alamo_atr_flowsheet_inputs(m)
-    initialize_alamo_atr_flowsheet(m)
+    build_nn_atr_flowsheet(m, conversion=0.94)
+    set_nn_atr_flowsheet_inputs(m)
+    initialize_nn_atr_flowsheet(m)
     make_optimization_model(m)
         
     ####### CONSTRAINTS #######
