@@ -550,7 +550,13 @@ if __name__ == "__main__":
             try:
                 main(T,P)
             except AssertionError: # corresponds to error in AMPL evaluation
+                df[list(df.keys())[0]].append(T)
+                df[list(df.keys())[1]].append(P)
                 df[list(df.keys())[2]].append("AMPL_error")
+                df[list(df.keys())[3]].append("999")
+                df[list(df.keys())[4]].append("999")
+                df[list(df.keys())[5]].append("999")
+                df[list(df.keys())[6]].append("999")
                 continue
     
 df = pd.DataFrame(df)
