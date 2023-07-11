@@ -452,7 +452,7 @@ def make_simulation_model(T,P,initialize=True):
         initialize_atr_flowsheet(m)
     
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.3)
-    m.fs.reformer_mix.steam_inlet.flow_mol.fix(230)
+    m.fs.reformer_mix.steam_inlet.flow_mol.fix(466.7)
     solver = get_solver()
     solver.solve(m, tee=True)
     return m
