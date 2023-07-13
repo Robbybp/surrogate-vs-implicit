@@ -101,13 +101,15 @@ def make_implicit(m):
         # - pressure is not an "input" as the pressure linking equation
         #   is not residual (because the reactor's outlet pressure is fixed)
     ]
-
-    #input_vars.extend(m.outlet_mole_frac_comp.values())
     input_vars.extend(m.fs.reformer_recuperator.hot_side_inlet.mole_frac_comp[0, :])
 
     external_eqns = list(reformer_igraph.constraints)
 
     to_exclude = ComponentSet(input_vars)
+    # These variables only appear in reformer_igraph due to a bug in how
+    # coefficients with values of zero were handled. This should be fixed in
+    # recent Pyomo main, but we leave this explicit filtering in here as we
+    # often run using the latest release.
     to_exclude.add(m.fs.reformer.lagrange_mult[0, "N"])
     to_exclude.add(m.fs.reformer.lagrange_mult[0, "Ar"])
     external_vars = [var for var in reformer_igraph.variables if var not in to_exclude]
@@ -117,7 +119,8 @@ def make_implicit(m):
     residual_eqn_set = ComponentSet(residual_eqns)
 
     # Bounds on variables in the implicit function can lead to
-    # undefined derivatives
+    # undefined derivatives. However, removing these bounds may make
+    # evaluation errors more likely.
     for i, var in enumerate(external_vars):
         var.setlb(None)
         var.setub(None)
@@ -128,8 +131,6 @@ def make_implicit(m):
         external_vars,
         residual_eqns,
         external_eqns,
-        # This forces us to use CyIpopt for the inner Newton solver
-        #solver_options=dict(solver_class=CyIpoptSolverWrapper),
     )
 
     ########### CONNECT FLOWSHEET TO THE IMPLICIT AUTOTHERMAL REFORMER ###########
