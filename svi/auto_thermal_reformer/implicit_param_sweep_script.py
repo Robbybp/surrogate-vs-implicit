@@ -549,15 +549,33 @@ if __name__ == "__main__":
         for P in np.arange(1447379,1947379,70000):
             try:
                 main(T,P)
-            except AssertionError: # corresponds to error in AMPL evaluation
+            except AssertionError:
                 df[list(df.keys())[0]].append(T)
                 df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append("AMPL_error")
+                df[list(df.keys())[2]].append("AMPL Error")
                 df[list(df.keys())[3]].append("999")
                 df[list(df.keys())[4]].append("999")
                 df[list(df.keys())[5]].append("999")
                 df[list(df.keys())[6]].append("999")
                 continue
-    
+            except OverflowError:
+                df[list(df.keys())[0]].append(T)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append("Overflow Error")
+                df[list(df.keys())[3]].append("999")
+                df[list(df.keys())[4]].append("999")
+                df[list(df.keys())[5]].append("999")
+                df[list(df.keys())[6]].append("999")
+                continue
+            except RuntimeError:
+                df[list(df.keys())[0]].append(T)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append("Runtime Error")
+                df[list(df.keys())[3]].append("999")
+                df[list(df.keys())[4]].append("999")
+                df[list(df.keys())[5]].append("999")
+                df[list(df.keys())[6]].append("999")
+                continue
+
 df = pd.DataFrame(df)
-df.to_csv("implicit_param_sweep_2.csv")
+df.to_csv("implicit_sweep_test2.csv")
