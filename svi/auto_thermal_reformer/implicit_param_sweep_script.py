@@ -521,8 +521,6 @@ def make_optimization_model(T,P,initialize=True):
     # to the Gibbs reactor will have to be determined by the optimization problem.
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
     m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
-    
-
     return m
 
 df = {'T':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': []}
@@ -531,7 +529,7 @@ def main(T,P):
     m = make_optimization_model(T,P)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
-    solver = pyo.SolverFactory("cyipopt", options = {"max_iter": 1000})
+    solver = pyo.SolverFactory("cyipopt", options = {"max_iter": 200})
     timer = TicTocTimer()
     timer.tic('starting timer')
     results = solver.solve(m_implicit, tee=True)
@@ -571,6 +569,15 @@ if __name__ == "__main__":
                 df[list(df.keys())[0]].append(T)
                 df[list(df.keys())[1]].append(P)
                 df[list(df.keys())[2]].append("Runtime Error")
+                df[list(df.keys())[3]].append("999")
+                df[list(df.keys())[4]].append("999")
+                df[list(df.keys())[5]].append("999")
+                df[list(df.keys())[6]].append("999")
+                continue
+            except ValueError:
+                df[list(df.keys())[0]].append(T)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append("Restoration Failed")
                 df[list(df.keys())[3]].append("999")
                 df[list(df.keys())[4]].append("999")
                 df[list(df.keys())[5]].append("999")
