@@ -454,6 +454,7 @@ def make_simulation_model(T,P,initialize=True):
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.3)
     m.fs.reformer_mix.steam_inlet.flow_mol.fix(466.7)
     solver = get_solver()
+    solver.options = {"max_iter": 200}
     solver.solve(m, tee=True)
     return m
 
