@@ -526,7 +526,7 @@ def main(X,P):
     m = make_optimization_model(X,P)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
-    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 100})
+    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 200})
     timer = TicTocTimer()
     timer.tic('starting timer')
     results = solver.solve(m_implicit, tee=True)
