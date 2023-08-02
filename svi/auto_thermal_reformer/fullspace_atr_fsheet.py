@@ -396,7 +396,7 @@ def make_optimization_model(initialize=True):
     # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
     @m.Constraint()
     def max_reformer_outlet_temp(m):
-        return m.fs.reformer.outlet.temperature[0] <= 1200
+        return m.fs.reformer_recuperator.hot_side_inlet.temperature[0] <= 1200.0
 
     # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
     @m.Constraint()
