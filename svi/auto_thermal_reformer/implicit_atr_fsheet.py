@@ -60,7 +60,6 @@ from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
 
 from svi.external import add_external_function_libraries_to_environment
 
-
 def make_implicit(m):
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
     full_igraph = IncidenceGraphInterface(m)
@@ -159,37 +158,15 @@ def make_implicit(m):
 def main():
     from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
     m = make_optimization_model()
-
-    #
-    # Initialize the flowsheet by solving the square system
-    #
-    from pyomo.util.subsystems import TemporarySubsystemManager
-    from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
-    print("INITIALIZING FLOWSHEET WITH SQUARE SOLVE")
-    to_fix = [
-        m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"],
-        m.fs.reformer_mix.steam_inlet.flow_mol[0],
-    ]
-    calc_var_kwds = dict(eps=1e-7)
-    solve_kwds = dict(tee=True)
-    solver = pyo.SolverFactory("ipopt")
-    with TemporarySubsystemManager(to_fix=to_fix):
-        solve_strongly_connected_components(
-            m,
-            solver=solver,
-            calc_var_kwds=calc_var_kwds,
-            solve_kwds=solve_kwds,
-        )
-    print("END SQUARE SOLVE OF FULL FLOWSHEET")
-    ####
-
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
-
-    solver = pyo.SolverFactory("cyipopt")
+    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 300})
     solver.solve(m_implicit, tee=True)
-    m.fs.reformer_bypass.split_fraction.pprint()
 
+    m.fs.reformer.report()
+    m.fs.reformer_recuperator.report()
+    m.fs.product.report()
+    m.fs.reformer_bypass.split_fraction.display()
 
 if __name__ == "__main__":
     main()
