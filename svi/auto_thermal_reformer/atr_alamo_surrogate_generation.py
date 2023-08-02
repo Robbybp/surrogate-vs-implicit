@@ -89,5 +89,5 @@ if __name__ == "__main__":
     dirname = os.path.dirname(__file__)
     basename = "data_atr.csv"
     fname = os.path.join(dirname, basename)
-    gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False)
+    gibbs_to_alamo(file_path = fname, show_surrogates = False, create_plots = False)
 
