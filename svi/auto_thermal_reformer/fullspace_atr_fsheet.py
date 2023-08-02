@@ -19,6 +19,7 @@
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
 
+######## IMPORT PACKAGES ########
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -52,11 +53,10 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 
+# For initialization testing
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 
-#
-# For debugging
-#
+# For debugging purposes
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
@@ -142,33 +142,44 @@ def build_atr_flowsheet(m):
     ########## CONNECT UNIT MODELS ##########
 
     m.fs.RECUP_COLD_IN = Arc(
-        source=m.fs.feed.outlet, destination=m.fs.reformer_recuperator.tube_inlet
+        source=m.fs.feed.outlet, 
+        destination=m.fs.reformer_recuperator.tube_inlet
     )
     m.fs.RECUP_COLD_OUT = Arc(
-        source=m.fs.reformer_recuperator.tube_outlet, destination=m.fs.NG_expander.inlet
+        source=m.fs.reformer_recuperator.tube_outlet, 
+        destination=m.fs.NG_expander.inlet
     )
     m.fs.NG_EXPAND_OUT = Arc(
-        source=m.fs.NG_expander.outlet, destination=m.fs.reformer_bypass.inlet
+        source=m.fs.NG_expander.outlet, 
+        destination=m.fs.reformer_bypass.inlet
     )
     m.fs.NG_TO_REF = Arc(
         source=m.fs.reformer_bypass.reformer_outlet,
         destination=m.fs.reformer_mix.gas_inlet,
     )
     m.fs.STAGE_1_OUT = Arc(
-        source=m.fs.air_compressor_s1.outlet, destination=m.fs.intercooler_s1.inlet
+        source=m.fs.air_compressor_s1.outlet, 
+        destination=m.fs.intercooler_s1.inlet
     )
     m.fs.IC_1_OUT = Arc(
-        source=m.fs.intercooler_s1.outlet, destination=m.fs.air_compressor_s2.inlet
+        source=m.fs.intercooler_s1.outlet, 
+        destination=m.fs.air_compressor_s2.inlet
     )
     m.fs.STAGE_2_OUT = Arc(
-        source=m.fs.air_compressor_s2.outlet, destination=m.fs.intercooler_s2.inlet
+        source=m.fs.air_compressor_s2.outlet, 
+        destination=m.fs.intercooler_s2.inlet
     )
     m.fs.IC_2_OUT = Arc(
-        source=m.fs.intercooler_s2.outlet, destination=m.fs.reformer_mix.oxygen_inlet
+        source=m.fs.intercooler_s2.outlet, 
+        destination=m.fs.reformer_mix.oxygen_inlet
     )
-    m.fs.REF_IN = Arc(source=m.fs.reformer_mix.outlet, destination=m.fs.reformer.inlet)
+    m.fs.REF_IN = Arc(
+        source=m.fs.reformer_mix.outlet, 
+        destination=m.fs.reformer.inlet
+    )
     m.fs.REF_OUT = Arc(
-        source=m.fs.reformer.outlet, destination=m.fs.reformer_recuperator.shell_inlet
+        source=m.fs.reformer.outlet, 
+        destination=m.fs.reformer_recuperator.shell_inlet
     )
     m.fs.RECUP_HOT_OUT = Arc(
         source=m.fs.reformer_recuperator.shell_outlet,
@@ -178,12 +189,14 @@ def build_atr_flowsheet(m):
         source=m.fs.reformer_bypass.bypass_outlet,
         destination=m.fs.bypass_rejoin.bypass_inlet,
     )
-    m.fs.PRODUCT = Arc(source=m.fs.bypass_rejoin.outlet, destination=m.fs.product.inlet)
+    m.fs.PRODUCT = Arc(
+        source=m.fs.bypass_rejoin.outlet, 
+        destination=m.fs.product.inlet
+    )
 
     ########## EXPAND ARCS ##########
 
     pyo.TransformationFactory("network.expand_arcs").apply_to(m.fs)
-
 
 def set_atr_flowsheet_inputs(m):
     # natural gas feed conditions
@@ -206,9 +219,7 @@ def set_atr_flowsheet_inputs(m):
     # recuperator conditions
 
     m.fs.reformer_recuperator.area.fix(4190)  # m2
-    m.fs.reformer_recuperator.overall_heat_transfer_coefficient.fix(
-        80
-    )  # W/m2K # it was 80e-3 # potential bug
+    m.fs.reformer_recuperator.overall_heat_transfer_coefficient.fix(80)  # W/m2K
 
     # natural gas expander conditions
 
@@ -265,9 +276,7 @@ def set_atr_flowsheet_inputs(m):
 
     # reformer outlet pressure
 
-    m.fs.reformer.outlet.pressure[0].fix(
-        137895
-    )  # Pa, our Gibbs Reactor has pressure change
+    m.fs.reformer.outlet.pressure[0].fix(137895)  # Pa, Gibbs Reactor has pressure change
 
 
 def initialize_atr_flowsheet(m):
@@ -305,35 +314,21 @@ def initialize_atr_flowsheet(m):
     m.fs.intercooler_s2.initialize()
     m.fs.reformer_bypass.initialize()
 
-    propagate_state(arc=m.fs.RECUP_COLD_IN)
-    propagate_state(arc=m.fs.RECUP_COLD_OUT)
-    propagate_state(arc=m.fs.NG_EXPAND_OUT)
-    propagate_state(arc=m.fs.NG_TO_REF)
-    propagate_state(arc=m.fs.STAGE_1_OUT)
-    propagate_state(arc=m.fs.IC_1_OUT)
-    propagate_state(arc=m.fs.STAGE_2_OUT)
-    propagate_state(arc=m.fs.IC_2_OUT)
-    propagate_state(arc=m.fs.REF_IN)
-    propagate_state(arc=m.fs.REF_OUT)
-    propagate_state(arc=m.fs.RECUP_HOT_OUT)
-    propagate_state(arc=m.fs.REF_BYPASS)
-    propagate_state(arc=m.fs.PRODUCT)
-
-
-def make_simulation_model(initialize=True):
+def make_initial_model(initialize=True):
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
     build_atr_flowsheet(m)
     set_atr_flowsheet_inputs(m)
     if initialize:
         initialize_atr_flowsheet(m)
+    return m
 
-    #
+def make_simulation_model(initialize=True):
+    m = make_initial_model(initialize=initialize)
+    
     # Fix degrees of freedom for simulation model
-    # (Fix one variable, add one constraint)
-    #
-    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix()
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
+    
     m.fs.reformer.conv_constraint = Constraint(
         expr=m.fs.reformer.conversion
         * m.fs.reformer.inlet.flow_mol[0]
@@ -345,11 +340,9 @@ def make_simulation_model(initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    # Fix conversion to 0.95
     m.fs.reformer.conversion.fix(0.95)
-
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.23)
     return m
-
 
 def make_optimization_model(initialize=True):
     """
@@ -359,7 +352,7 @@ def make_optimization_model(initialize=True):
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
     the maximum product temperature is 650 K.
     """
-    m = make_simulation_model(initialize=initialize)
+    m = make_initial_model(initialize=initialize)
 
     # TODO: Optionally solve the simulation model at this point so we start
     # the optimization problem with no primal infeasibility (other than due
@@ -386,6 +379,7 @@ def make_optimization_model(initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
+    
     # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
     m.fs.reformer.conversion.fix(0.95)
 
@@ -409,10 +403,15 @@ def make_optimization_model(initialize=True):
     def max_product_temp(m):
         return m.fs.product.temperature[0] <= 650
 
+    # SET LOWER AND UPPER BOUNDS FOR THE INLET FLOW OF NATURAL GAS
+    m.fs.feed.outlet.flow_mol[0].setlb(1120)
+    m.fs.feed.outlet.flow_mol[0].setub(1250)
+
     # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
     # to the Gibbs reactor will have to be determined by the optimization problem.
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
     m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
+    m.fs.feed.outlet.flow_mol.unfix()
 
     return m
 
@@ -424,10 +423,9 @@ if __name__ == "__main__":
 
     if optimization:
         m = make_optimization_model()
-        #m.fs.reformer.conversion.fix(0.9999)
 
         solver = get_solver()
-        solver.options = {"tol": 1e-8, "max_iter": 1000}
+        solver.options = {"tol": 1e-7, "max_iter": 300}
         solver.solve(m, tee=True)
 
         m.fs.reformer.report()
@@ -437,7 +435,6 @@ if __name__ == "__main__":
 
     if simulation:
         m = make_simulation_model()
-        #m.fs.reformer.conversion.fix(0.9999)
 
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
