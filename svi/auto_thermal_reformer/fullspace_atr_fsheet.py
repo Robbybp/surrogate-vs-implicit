@@ -344,44 +344,11 @@ def make_simulation_model(initialize=True):
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.23)
     return m
 
-def make_optimization_model(initialize=True):
-    """
-    The optimization problem to solve is the following:
-
-    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
-    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
-    the maximum product temperature is 650 K.
-    """
-    m = make_initial_model(initialize=initialize)
-
-    # TODO: Optionally solve the simulation model at this point so we start
-    # the optimization problem with no primal infeasibility (other than due
-    # to any operational constraints we might impose).
-
+def add_obj_and_constraints(m):
     ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(
         expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
     )
-
-    ####### CONSTRAINTS #######
-    m.fs.reformer.conversion = Var(
-        bounds=(0, 1), units=pyunits.dimensionless
-    )  # fraction
-
-    m.fs.reformer.conv_constraint = Constraint(
-        expr=m.fs.reformer.conversion
-        * m.fs.reformer.inlet.flow_mol[0]
-        * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
-        == (
-            m.fs.reformer.inlet.flow_mol[0]
-            * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
-            - m.fs.reformer.outlet.flow_mol[0]
-            * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
-        )
-    )
-    
-    # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
-    m.fs.reformer.conversion.fix(0.95)
 
     # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
     @m.Constraint()
@@ -413,8 +380,43 @@ def make_optimization_model(initialize=True):
     m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
     m.fs.feed.outlet.flow_mol.unfix()
 
-    return m
+def make_optimization_model(initialize=True):
+    """
+    The optimization problem to solve is the following:
 
+    Maximize H2 composition in the product stream such that its minimum flow is 3500 mol/s,
+    its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
+    the maximum product temperature is 650 K.
+    """
+    m = make_initial_model(initialize=initialize)
+
+    # TODO: Optionally solve the simulation model at this point so we start
+    # the optimization problem with no primal infeasibility (other than due
+    # to any operational constraints we might impose).
+
+    add_obj_and_constraints(m)
+
+    ####### CONVERSION CONSTRAINT #######
+    m.fs.reformer.conversion = Var(
+        bounds=(0, 1), units=pyunits.dimensionless
+    )  # fraction
+
+    m.fs.reformer.conv_constraint = Constraint(
+        expr=m.fs.reformer.conversion
+        * m.fs.reformer.inlet.flow_mol[0]
+        * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+        == (
+            m.fs.reformer.inlet.flow_mol[0]
+            * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+            - m.fs.reformer.outlet.flow_mol[0]
+            * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
+        )
+    )
+    
+    # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
+    m.fs.reformer.conversion.fix(0.95)
+
+    return m
 
 if __name__ == "__main__":
     simulation = False
