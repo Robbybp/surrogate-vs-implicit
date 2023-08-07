@@ -167,10 +167,20 @@ def main():
     from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
     from pyomo.contrib.incidence_analysis.interface import get_structural_incidence_matrix
     igraph = IncidenceGraphInterface()
-    vbs, cbs = igraph.block_triangularize(external_vars, external_cons)
-    var_order = sum(vbs, [])
-    con_order = sum(cbs, [])
+    vblocks, cblocks = igraph.block_triangularize(external_vars, external_cons)
+    var_order = sum(vblocks, [])
+    con_order = sum(cblocks, [])
     imat = get_structural_incidence_matrix(var_order, con_order)
+
+    for i, (vb, cb) in enumerate(zip(vblocks, cblocks)):
+        print(f"Block {i}")
+        print("---------")
+        print("Variables")
+        for var in vb:
+            print(f"  {var.name}")
+        print("Constraints")
+        for con in cb:
+            print(f"  {con.name}")
 
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
