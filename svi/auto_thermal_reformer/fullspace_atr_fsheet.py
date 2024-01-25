@@ -21,6 +21,8 @@
 
 ######## IMPORT PACKAGES ########
 import pyomo.environ as pyo
+import pandas as pd
+import numpy as np
 from pyomo.environ import (
     Constraint,
     Var,
@@ -31,7 +33,9 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
+from pyomo.common.timing import TicTocTimer
 from pyomo.network import Arc, SequentialDecomposition
+from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 from idaes.core import FlowsheetBlock
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
@@ -49,7 +53,6 @@ from idaes.models.unit_models import (
 )
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
-from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 
@@ -198,12 +201,12 @@ def build_atr_flowsheet(m):
 
     pyo.TransformationFactory("network.expand_arcs").apply_to(m.fs)
 
-def set_atr_flowsheet_inputs(m):
+def set_atr_flowsheet_inputs(m,P):
     # natural gas feed conditions
 
     m.fs.feed.outlet.flow_mol.fix(1161.9)  # mol/s
     m.fs.feed.outlet.temperature.fix(288.15)  # K
-    m.fs.feed.outlet.pressure.fix(3447379)  # Pa
+    m.fs.feed.outlet.pressure.fix(P)  # Pa
     m.fs.feed.outlet.mole_frac_comp[0, "CH4"].fix(0.931)
     m.fs.feed.outlet.mole_frac_comp[0, "C2H6"].fix(0.032)
     m.fs.feed.outlet.mole_frac_comp[0, "C3H8"].fix(0.007)
@@ -280,8 +283,6 @@ def set_atr_flowsheet_inputs(m):
 
 
 def initialize_atr_flowsheet(m):
-    ####### PROPAGATE STATES #######
-
     # initialize the reformer with random values.
     # this is only to get a good set of initial values such that
     # IPOPT can then take over and solve this flowsheet for us.
@@ -314,17 +315,17 @@ def initialize_atr_flowsheet(m):
     m.fs.intercooler_s2.initialize()
     m.fs.reformer_bypass.initialize()
 
-def make_initial_model(initialize=True):
+def make_initial_model(P,initialize=True):
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
     build_atr_flowsheet(m)
-    set_atr_flowsheet_inputs(m)
+    set_atr_flowsheet_inputs(m,P)
     if initialize:
         initialize_atr_flowsheet(m)
     return m
 
-def make_simulation_model(initialize=True):
-    m = make_initial_model(initialize=initialize)
+def make_simulation_model(P,initialize=True):
+    m = make_initial_model(P,initialize=initialize)
     
     # Fix degrees of freedom for simulation model
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
@@ -380,7 +381,7 @@ def add_obj_and_constraints(m):
     m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
     m.fs.feed.outlet.flow_mol.unfix()
 
-def make_optimization_model(initialize=True):
+def make_optimization_model(X,P,initialize=True):
     """
     The optimization problem to solve is the following:
 
@@ -388,7 +389,7 @@ def make_optimization_model(initialize=True):
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
     the maximum product temperature is 650 K.
     """
-    m = make_initial_model(initialize=initialize)
+    m = make_initial_model(P,initialize=initialize)
 
     # TODO: Optionally solve the simulation model at this point so we start
     # the optimization problem with no primal infeasibility (other than due
@@ -413,36 +414,77 @@ def make_optimization_model(initialize=True):
         )
     )
     
-    # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
-    m.fs.reformer.conversion.fix(0.95)
+    # ACHIEVE A CONVERSION OF X IN AUTOTHERMAL REFORMER
+    m.fs.reformer.conversion.fix(X)
 
     return m
+
+df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
+
+def main(X,P):
+    m = make_optimization_model(X,P)
+    solver = pyo.SolverFactory('ipopt', executable = "~/local/bin/ipopt")
+    solver.options = {"tol": 1e-7, "max_iter": 300}
+    timer = TicTocTimer()
+    timer.tic("starting timer")
+    results = solver.solve(m, tee=True)
+    dT = timer.toc("end timer")
+    df[list(df.keys())[0]].append(X)
+    df[list(df.keys())[1]].append(P)
+    df[list(df.keys())[2]].append(results.solver.termination_condition)
+    df[list(df.keys())[3]].append(dT)
+    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
     simulation = False
     optimization = not simulation
     visualize = False
-
     if optimization:
-        m = make_optimization_model()
-
-        solver = get_solver()
-        solver.options = {"tol": 1e-7, "max_iter": 300}
-        solver.solve(m, tee=True)
-
-        m.fs.reformer.report()
-        m.fs.reformer_recuperator.report()
-        m.fs.product.report()
-        m.fs.reformer_bypass.split_fraction.display()
+        for X in np.arange(0.90,0.98,0.01):
+            for P in np.arange(1447379,1947379,70000):
+                try:
+                    main(X,P)
+                except AssertionError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("AMPL Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+                except OverflowError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("Overflow Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+                except RuntimeError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("Runtime Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+   
+    df = pd.DataFrame(df)
+    df.to_csv('fullspace_experiment.csv')
 
     if simulation:
-        m = make_simulation_model()
 
+        m = make_simulation_model(P = 3447379, initialize = True)
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
         solve_kwds = dict(tee=True)
-        solver = get_solver()
-        solver.options["max_iter"] = 1000
+        solver = pyo.SolverFactory("ipopt")
         solve_strongly_connected_components(
             m,
             solver=solver,

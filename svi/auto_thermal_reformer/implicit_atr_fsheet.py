@@ -18,7 +18,9 @@
 #
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
-
+import pandas as pd
+import numpy as np
+from pyomo.common.timing import TicTocTimer
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -52,6 +54,7 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
 from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
@@ -154,19 +157,52 @@ def make_implicit(m):
 
     return m_implicit
 
+df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
 
-def main():
+def main(X,P):
     from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
-    m = make_optimization_model()
+    m = make_optimization_model(X,P)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
-    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 300})
-    solver.solve(m_implicit, tee=True)
-
-    m.fs.reformer.report()
-    m.fs.reformer_recuperator.report()
-    m.fs.product.report()
-    m.fs.reformer_bypass.split_fraction.display()
+    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 100})
+    timer = TicTocTimer()
+    timer.tic("starting timer")
+    print(X,P)
+    results = solver.solve(m_implicit, tee=True)
+    dT = timer.toc("end timer")
+    df[list(df.keys())[0]].append(X)
+    df[list(df.keys())[1]].append(P)
+    df[list(df.keys())[2]].append(results.solver.termination_condition)
+    df[list(df.keys())[3]].append(dT)
+    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
-    main()
+    for X in np.arange(0.90,0.98,0.01):
+        for P in np.arange(1447379,1947379,70000):
+            try:
+                main(X,P)
+            except PyNumeroEvaluationError:
+                df[list(df.keys())[0]].append(X)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append("AMPL Error")
+                df[list(df.keys())[3]].append(999)
+                df[list(df.keys())[4]].append(999)
+                df[list(df.keys())[5]].append(999)
+                df[list(df.keys())[6]].append(999)
+                df[list(df.keys())[7]].append(999)
+            except RuntimeError:
+                df[list(df.keys())[0]].append(X)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append("AMPL Error")
+                df[list(df.keys())[3]].append(999)
+                df[list(df.keys())[4]].append(999)
+                df[list(df.keys())[5]].append(999)
+                df[list(df.keys())[6]].append(999)
+                df[list(df.keys())[7]].append(999)
+
+
+df = pd.DataFrame(df)
+df.to_csv("implicit_experiment.csv")
