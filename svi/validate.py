@@ -41,10 +41,10 @@ def validate_solution(model, tolerance=0.0):
                 vars_violating_bounds.append((var, var.lb, lb_diff))
 
     if violated_cons_reduced:
-        print("WARNING: Constraints in the reduced-space model are violated")
+        print("WARNING: Constraints are violated!")
 
     if vars_violating_bounds:
-        print("WARNING: There are variables violating their bounds")
+        print("WARNING: There are variables violating their bounds!")
 
     violations = (violated_cons_reduced, vars_violating_bounds)
     valid = not any(violations)
