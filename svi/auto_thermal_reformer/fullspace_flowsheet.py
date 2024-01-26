@@ -63,6 +63,8 @@ from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
+from svi.reactor_model import add_reactor_model
+
 
 def build_atr_flowsheet(m):
     ########## ADD THERMODYNAMIC PROPERTIES ##########
