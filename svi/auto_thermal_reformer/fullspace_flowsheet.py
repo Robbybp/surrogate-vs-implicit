@@ -68,7 +68,7 @@ from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
-from svi.reactor_model import add_reactor_model
+from svi.auto_thermal_reformer.reactor_model import add_reactor_model
 
 
 def build_atr_flowsheet(m):
@@ -213,7 +213,10 @@ def set_atr_flowsheet_inputs(m,P):
 
     m.fs.feed.outlet.flow_mol.fix(1161.9)  # mol/s
     m.fs.feed.outlet.temperature.fix(288.15)  # K
-    m.fs.feed.outlet.pressure.fix(P)  # Pa
+
+    # Why is this failing without explicit units?
+    m.fs.feed.outlet.pressure.fix(P*pyo.units.Pa)  # Pa
+
     m.fs.feed.outlet.mole_frac_comp[0, "CH4"].fix(0.931)
     m.fs.feed.outlet.mole_frac_comp[0, "C2H6"].fix(0.032)
     m.fs.feed.outlet.mole_frac_comp[0, "C3H8"].fix(0.007)
