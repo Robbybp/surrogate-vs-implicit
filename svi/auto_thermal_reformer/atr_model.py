@@ -37,19 +37,25 @@ from idaes.models.unit_models import GibbsReactor, Mixer
 from idaes.core.solvers import get_solver
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 
-def create_instance(
+
+
+def add_reactor_model(
+    m,
     conversion=0.95,
     flow_mol_h2o=300,
     flow_mol_gas=750,
     temp_gas=750,
 ):
-    m = ConcreteModel()
-    m.fs = FlowsheetBlock(dynamic=False)
-    components = ['H2', 'CO', "H2O", 'CO2', 'CH4', "C2H6", "C3H8", "C4H10",'N2', 'O2', 'Ar']
-    thermo_props_config_dict = get_prop(components = components)
-    m.fs.thermo_params = GenericParameterBlock(**thermo_props_config_dict)
-    
-    m.fs.R101 = GibbsReactor(
+    """Add reactor unit model to provided Pyomo/IDAES model
+
+    Here we assume the model has been set up with a flowsheet, property package,
+    and whatever other "global" components are necessary to add the reactor model.
+    This function is suitable for constructing a standalone reactor model. That
+    is, it does not attempt to add any arcs to connect to the rest of the
+    flowsheet.
+
+    """
+    m.fs.reformer = GibbsReactor(
     has_heat_transfer = True,
     has_pressure_change = True,
     inert_species = ["N2", "Ar"],
@@ -59,7 +65,7 @@ def create_instance(
         inlet_list = ["gas_inlet", "oxygen_inlet", "steam_inlet"],
         property_package = m.fs.thermo_params)
 
-    m.fs.connect = Arc(source=m.fs.reformer_mix.outlet, destination=m.fs.R101.inlet)
+    m.fs.connect = Arc(source=m.fs.reformer_mix.outlet, destination=m.fs.reformer.inlet)
 
     TransformationFactory("network.expand_arcs").apply_to(m)
 
@@ -128,29 +134,52 @@ def create_instance(
     m.fs.reformer_mix.initialize()  
     propagate_state(arc=m.fs.connect)
 
-    m.fs.R101.initialize()  
+    m.fs.reformer.initialize()  
 
     ######### SET REFORMER OUTLET PRESSURE #########
-    m.fs.R101.outlet.pressure[0].fix(137895)
-    m.fs.R101.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
+    m.fs.reformer.outlet.pressure[0].fix(137895)
+    m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)  # fraction
 
-    m.fs.R101.conv_constraint = Constraint(
-        expr=m.fs.R101.conversion
-        * m.fs.R101.inlet.flow_mol[0]
-        * m.fs.R101.inlet.mole_frac_comp[0, "CH4"]
+    m.fs.reformer.conv_constraint = Constraint(
+        expr=m.fs.reformer.conversion
+        * m.fs.reformer.inlet.flow_mol[0]
+        * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
         == (
-            m.fs.R101.inlet.flow_mol[0] * m.fs.R101.inlet.mole_frac_comp[0, "CH4"]
-            - m.fs.R101.outlet.flow_mol[0] * m.fs.R101.outlet.mole_frac_comp[0, "CH4"]
+            m.fs.reformer.inlet.flow_mol[0] * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
+            - m.fs.reformer.outlet.flow_mol[0] * m.fs.reformereformeroutlet.mole_frac_comp[0, "CH4"]
         )
     )
 
-    m.fs.R101.conversion.fix(conversion)
+    m.fs.reformer.conversion.fix(conversion)
+
+
+def create_instance(
+    conversion=0.95,
+    flow_mol_h2o=300,
+    flow_mol_gas=750,
+    temp_gas=750,
+):
+    # Set up global information
+    m = ConcreteModel()
+    m.fs = FlowsheetBlock(dynamic=False)
+    components = ['H2', 'CO', "H2O", 'CO2', 'CH4', "C2H6", "C3H8", "C4H10",'N2', 'O2', 'Ar']
+    thermo_props_config_dict = get_prop(components = components)
+    m.fs.thermo_params = GenericParameterBlock(**thermo_props_config_dict)
+
+    add_reactor_model(
+        m,
+        conversion=conversion,
+        flow_mol_h2o=flow_mol_h2o,
+        flow_mol_gas=flow_mol_gas,
+        temp_gas=temp_gas,
+    )
 
     return m
 
 
 if __name__ == "__main__":
     from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+    from svi.validate import validate_solution
     m = create_instance()
     igraph = IncidenceGraphInterface(m)
     var_dmp, con_dmp = igraph.dulmage_mendelsohn()
@@ -159,3 +188,5 @@ if __name__ == "__main__":
 
     solver = pyo.SolverFactory("ipopt")
     solver.solve(m, tee=True)
+    tol = 1e-5
+    validate_solution(m, tolerance=tol)
