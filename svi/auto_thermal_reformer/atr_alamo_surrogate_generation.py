@@ -34,7 +34,7 @@ def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
     if 'Unnamed: 0' in df.columns:
         df = df.drop('Unnamed: 0', axis=1)
 
-    input_data = df.iloc[:, :4]  
+    input_data = df.iloc[:, :4] 
     output_data = df.iloc[:, 4:]    
     
     # Split training and validation data
@@ -84,3 +84,10 @@ def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
     fname_val_plot = os.path.join(file_dir, 'parity_val_atr.pdf')   
     
     return fname_surrogates, fname_train_plot, fname_val_plot
+
+if __name__ == "__main__":
+    dirname = os.path.dirname(__file__)
+    basename = "data_atr.csv"
+    fname = os.path.join(dirname, basename)
+    gibbs_to_alamo(file_path = fname, show_surrogates = False, create_plots = False)
+

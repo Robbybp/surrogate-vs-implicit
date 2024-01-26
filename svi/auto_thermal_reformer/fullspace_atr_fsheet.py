@@ -19,7 +19,10 @@
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
 
+######## IMPORT PACKAGES ########
 import pyomo.environ as pyo
+import pandas as pd
+import numpy as np
 from pyomo.environ import (
     Constraint,
     Var,
@@ -30,7 +33,14 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
+from pyomo.common.timing import TicTocTimer
 from pyomo.network import Arc, SequentialDecomposition
+from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
+
+#import os
+#assert "DYLD_LIBRARY_PATH" not in os.environ
+#os.environ["DYLD_LIBRARY_PATH"] = "/Users/sbugosen/.local/lib"
+
 from idaes.core import FlowsheetBlock
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
@@ -48,15 +58,13 @@ from idaes.models.unit_models import (
 )
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
-from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 
+# For initialization testing
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 
-#
-# For debugging
-#
+# For debugging purposes
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
@@ -142,33 +150,44 @@ def build_atr_flowsheet(m):
     ########## CONNECT UNIT MODELS ##########
 
     m.fs.RECUP_COLD_IN = Arc(
-        source=m.fs.feed.outlet, destination=m.fs.reformer_recuperator.tube_inlet
+        source=m.fs.feed.outlet, 
+        destination=m.fs.reformer_recuperator.tube_inlet
     )
     m.fs.RECUP_COLD_OUT = Arc(
-        source=m.fs.reformer_recuperator.tube_outlet, destination=m.fs.NG_expander.inlet
+        source=m.fs.reformer_recuperator.tube_outlet, 
+        destination=m.fs.NG_expander.inlet
     )
     m.fs.NG_EXPAND_OUT = Arc(
-        source=m.fs.NG_expander.outlet, destination=m.fs.reformer_bypass.inlet
+        source=m.fs.NG_expander.outlet, 
+        destination=m.fs.reformer_bypass.inlet
     )
     m.fs.NG_TO_REF = Arc(
         source=m.fs.reformer_bypass.reformer_outlet,
         destination=m.fs.reformer_mix.gas_inlet,
     )
     m.fs.STAGE_1_OUT = Arc(
-        source=m.fs.air_compressor_s1.outlet, destination=m.fs.intercooler_s1.inlet
+        source=m.fs.air_compressor_s1.outlet, 
+        destination=m.fs.intercooler_s1.inlet
     )
     m.fs.IC_1_OUT = Arc(
-        source=m.fs.intercooler_s1.outlet, destination=m.fs.air_compressor_s2.inlet
+        source=m.fs.intercooler_s1.outlet, 
+        destination=m.fs.air_compressor_s2.inlet
     )
     m.fs.STAGE_2_OUT = Arc(
-        source=m.fs.air_compressor_s2.outlet, destination=m.fs.intercooler_s2.inlet
+        source=m.fs.air_compressor_s2.outlet, 
+        destination=m.fs.intercooler_s2.inlet
     )
     m.fs.IC_2_OUT = Arc(
-        source=m.fs.intercooler_s2.outlet, destination=m.fs.reformer_mix.oxygen_inlet
+        source=m.fs.intercooler_s2.outlet, 
+        destination=m.fs.reformer_mix.oxygen_inlet
     )
-    m.fs.REF_IN = Arc(source=m.fs.reformer_mix.outlet, destination=m.fs.reformer.inlet)
+    m.fs.REF_IN = Arc(
+        source=m.fs.reformer_mix.outlet, 
+        destination=m.fs.reformer.inlet
+    )
     m.fs.REF_OUT = Arc(
-        source=m.fs.reformer.outlet, destination=m.fs.reformer_recuperator.shell_inlet
+        source=m.fs.reformer.outlet, 
+        destination=m.fs.reformer_recuperator.shell_inlet
     )
     m.fs.RECUP_HOT_OUT = Arc(
         source=m.fs.reformer_recuperator.shell_outlet,
@@ -178,19 +197,21 @@ def build_atr_flowsheet(m):
         source=m.fs.reformer_bypass.bypass_outlet,
         destination=m.fs.bypass_rejoin.bypass_inlet,
     )
-    m.fs.PRODUCT = Arc(source=m.fs.bypass_rejoin.outlet, destination=m.fs.product.inlet)
+    m.fs.PRODUCT = Arc(
+        source=m.fs.bypass_rejoin.outlet, 
+        destination=m.fs.product.inlet
+    )
 
     ########## EXPAND ARCS ##########
 
     pyo.TransformationFactory("network.expand_arcs").apply_to(m.fs)
 
-
-def set_atr_flowsheet_inputs(m):
+def set_atr_flowsheet_inputs(m,P):
     # natural gas feed conditions
 
     m.fs.feed.outlet.flow_mol.fix(1161.9)  # mol/s
     m.fs.feed.outlet.temperature.fix(288.15)  # K
-    m.fs.feed.outlet.pressure.fix(3447379)  # Pa
+    m.fs.feed.outlet.pressure.fix(P)  # Pa
     m.fs.feed.outlet.mole_frac_comp[0, "CH4"].fix(0.931)
     m.fs.feed.outlet.mole_frac_comp[0, "C2H6"].fix(0.032)
     m.fs.feed.outlet.mole_frac_comp[0, "C3H8"].fix(0.007)
@@ -206,9 +227,7 @@ def set_atr_flowsheet_inputs(m):
     # recuperator conditions
 
     m.fs.reformer_recuperator.area.fix(4190)  # m2
-    m.fs.reformer_recuperator.overall_heat_transfer_coefficient.fix(
-        80
-    )  # W/m2K # it was 80e-3 # potential bug
+    m.fs.reformer_recuperator.overall_heat_transfer_coefficient.fix(80)  # W/m2K
 
     # natural gas expander conditions
 
@@ -265,14 +284,10 @@ def set_atr_flowsheet_inputs(m):
 
     # reformer outlet pressure
 
-    m.fs.reformer.outlet.pressure[0].fix(
-        137895
-    )  # Pa, our Gibbs Reactor has pressure change
+    m.fs.reformer.outlet.pressure[0].fix(137895)  # Pa, Gibbs Reactor has pressure change
 
 
 def initialize_atr_flowsheet(m):
-    ####### PROPAGATE STATES #######
-
     # initialize the reformer with random values.
     # this is only to get a good set of initial values such that
     # IPOPT can then take over and solve this flowsheet for us.
@@ -305,35 +320,21 @@ def initialize_atr_flowsheet(m):
     m.fs.intercooler_s2.initialize()
     m.fs.reformer_bypass.initialize()
 
-    propagate_state(arc=m.fs.RECUP_COLD_IN)
-    propagate_state(arc=m.fs.RECUP_COLD_OUT)
-    propagate_state(arc=m.fs.NG_EXPAND_OUT)
-    propagate_state(arc=m.fs.NG_TO_REF)
-    propagate_state(arc=m.fs.STAGE_1_OUT)
-    propagate_state(arc=m.fs.IC_1_OUT)
-    propagate_state(arc=m.fs.STAGE_2_OUT)
-    propagate_state(arc=m.fs.IC_2_OUT)
-    propagate_state(arc=m.fs.REF_IN)
-    propagate_state(arc=m.fs.REF_OUT)
-    propagate_state(arc=m.fs.RECUP_HOT_OUT)
-    propagate_state(arc=m.fs.REF_BYPASS)
-    propagate_state(arc=m.fs.PRODUCT)
-
-
-def make_simulation_model(initialize=True):
+def make_initial_model(P,initialize=True):
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
     build_atr_flowsheet(m)
-    set_atr_flowsheet_inputs(m)
+    set_atr_flowsheet_inputs(m,P)
     if initialize:
         initialize_atr_flowsheet(m)
+    return m
 
-    #
+def make_simulation_model(P,initialize=True):
+    m = make_initial_model(P,initialize=initialize)
+    
     # Fix degrees of freedom for simulation model
-    # (Fix one variable, add one constraint)
-    #
-    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix()
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
+    
     m.fs.reformer.conv_constraint = Constraint(
         expr=m.fs.reformer.conversion
         * m.fs.reformer.inlet.flow_mol[0]
@@ -345,13 +346,47 @@ def make_simulation_model(initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    # Fix conversion to 0.95
     m.fs.reformer.conversion.fix(0.95)
-
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.23)
     return m
 
+def add_obj_and_constraints(m):
+    ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
+    m.fs.obj = pyo.Objective(
+        expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
+    )
 
-def make_optimization_model(initialize=True):
+    # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
+    @m.Constraint()
+    def min_product_flow_mol(m):
+        return m.fs.product.flow_mol[0] >= 3500
+
+    # MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
+    @m.Constraint()
+    def max_product_N2_comp(m):
+        return m.fs.product.mole_frac_comp[0, "N2"] <= 0.3
+
+    # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
+    @m.Constraint()
+    def max_reformer_outlet_temp(m):
+        return m.fs.reformer_recuperator.hot_side_inlet.temperature[0] <= 1200.0
+
+    # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
+    @m.Constraint()
+    def max_product_temp(m):
+        return m.fs.product.temperature[0] <= 650
+
+    # SET LOWER AND UPPER BOUNDS FOR THE INLET FLOW OF NATURAL GAS
+    m.fs.feed.outlet.flow_mol[0].setlb(1120)
+    m.fs.feed.outlet.flow_mol[0].setub(1250)
+
+    # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
+    # to the Gibbs reactor will have to be determined by the optimization problem.
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
+    m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
+    m.fs.feed.outlet.flow_mol.unfix()
+
+def make_optimization_model(X,P,initialize=True):
     """
     The optimization problem to solve is the following:
 
@@ -359,18 +394,15 @@ def make_optimization_model(initialize=True):
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
     the maximum product temperature is 650 K.
     """
-    m = make_simulation_model(initialize=initialize)
+    m = make_initial_model(P,initialize=initialize)
 
     # TODO: Optionally solve the simulation model at this point so we start
     # the optimization problem with no primal infeasibility (other than due
     # to any operational constraints we might impose).
 
-    ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
-    m.fs.obj = pyo.Objective(
-        expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
-    )
+    add_obj_and_constraints(m)
 
-    ####### CONSTRAINTS #######
+    ####### CONVERSION CONSTRAINT #######
     m.fs.reformer.conversion = Var(
         bounds=(0, 1), units=pyunits.dimensionless
     )  # fraction
@@ -386,64 +418,78 @@ def make_optimization_model(initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    # ACHIEVE A CONVERSION OF 0.95 IN AUTOTHERMAL REFORMER
-    m.fs.reformer.conversion.fix(0.95)
-
-    # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
-    @m.Constraint()
-    def min_product_flow_mol(m):
-        return m.fs.product.flow_mol[0] >= 3500
-
-    # MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
-    @m.Constraint()
-    def max_product_N2_comp(m):
-        return m.fs.product.mole_frac_comp[0, "N2"] <= 0.3
-
-    # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
-    @m.Constraint()
-    def max_reformer_outlet_temp(m):
-        return m.fs.reformer.outlet.temperature[0] <= 1200
-
-    # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
-    @m.Constraint()
-    def max_product_temp(m):
-        return m.fs.product.temperature[0] <= 650
-
-    # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
-    # to the Gibbs reactor will have to be determined by the optimization problem.
-    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
-    m.fs.reformer_mix.steam_inlet.flow_mol.unfix()
+    
+    # ACHIEVE A CONVERSION OF X IN AUTOTHERMAL REFORMER
+    m.fs.reformer.conversion.fix(X)
 
     return m
 
+df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
+
+def main(X,P):
+    m = make_optimization_model(X,P)
+    solver = pyo.SolverFactory('ipopt', executable = "~/.local/bin/ipopt")
+    solver.options = {"tol": 1e-7, "max_iter": 300}
+    timer = TicTocTimer()
+    timer.tic("starting timer")
+    results = solver.solve(m, tee=True)
+    dT = timer.toc("end timer")
+    df[list(df.keys())[0]].append(X)
+    df[list(df.keys())[1]].append(P)
+    df[list(df.keys())[2]].append(results.solver.termination_condition)
+    df[list(df.keys())[3]].append(dT)
+    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
     simulation = False
     optimization = not simulation
     visualize = False
-
     if optimization:
-        m = make_optimization_model()
-        #m.fs.reformer.conversion.fix(0.9999)
-
-        solver = get_solver()
-        solver.options = {"tol": 1e-8, "max_iter": 1000}
-        solver.solve(m, tee=True)
-
-        m.fs.reformer.report()
-        m.fs.reformer_recuperator.report()
-        m.fs.product.report()
-        m.fs.reformer_bypass.split_fraction.display()
+        for X in np.arange(0.90,0.98,0.01):
+            for P in np.arange(1447379,1947379,70000):
+                try:
+                    main(X,P)
+                except AssertionError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("AMPL Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+                except OverflowError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("Overflow Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+                except RuntimeError:
+                     df[list(df.keys())[0]].append(X)
+                     df[list(df.keys())[1]].append(P)
+                     df[list(df.keys())[2]].append("Runtime Error")
+                     df[list(df.keys())[3]].append(999)
+                     df[list(df.keys())[4]].append(999)
+                     df[list(df.keys())[5]].append(999)
+                     df[list(df.keys())[6]].append(999)
+                     df[list(df.keys())[7]].append(999)
+   
+    df = pd.DataFrame(df)
+    df.to_csv('fullspace_experiment.csv')
 
     if simulation:
-        m = make_simulation_model()
-        #m.fs.reformer.conversion.fix(0.9999)
 
+        m = make_simulation_model(P = 3447379, initialize = True)
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
         solve_kwds = dict(tee=True)
-        solver = get_solver()
-        solver.options["max_iter"] = 1000
+        solver = pyo.SolverFactory("ipopt")
         solve_strongly_connected_components(
             m,
             solver=solver,
