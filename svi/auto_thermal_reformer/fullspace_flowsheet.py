@@ -36,6 +36,11 @@ from pyomo.environ import (
 from pyomo.common.timing import TicTocTimer
 from pyomo.network import Arc, SequentialDecomposition
 from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
+
+#import os
+#assert "DYLD_LIBRARY_PATH" not in os.environ
+#os.environ["DYLD_LIBRARY_PATH"] = "/Users/sbugosen/.local/lib"
+
 from idaes.core import FlowsheetBlock
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
@@ -425,7 +430,7 @@ df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], '
 
 def main(X,P):
     m = make_optimization_model(X,P)
-    solver = pyo.SolverFactory('ipopt', executable = "~/local/bin/ipopt")
+    solver = pyo.SolverFactory('ipopt', executable = "~/.local/bin/ipopt")
     solver.options = {"tol": 1e-7, "max_iter": 300}
     timer = TicTocTimer()
     timer.tic("starting timer")

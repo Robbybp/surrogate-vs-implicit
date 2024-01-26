@@ -146,7 +146,7 @@ def add_reactor_model(
         * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
         == (
             m.fs.reformer.inlet.flow_mol[0] * m.fs.reformer.inlet.mole_frac_comp[0, "CH4"]
-            - m.fs.reformer.outlet.flow_mol[0] * m.fs.reformereformeroutlet.mole_frac_comp[0, "CH4"]
+            - m.fs.reformer.outlet.flow_mol[0] * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
 
