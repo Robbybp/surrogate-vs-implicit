@@ -75,7 +75,6 @@ import matplotlib.pyplot as plt
 
 def validate_alamo_or_nn(fname = "alamo_experiment.csv"):
     df = pd.read_csv(fname)
-    df = df.head(10)
     
     # Parse the data needed for validation
     validation_inputs = df[['X', 'P', 'Steam', 'Bypass Frac', 'CH4 Feed']]
