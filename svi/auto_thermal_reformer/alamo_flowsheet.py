@@ -143,7 +143,10 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
     # build the surrogate for the Gibbs Reactor using the JSON file obtained before
     surrogate = AlamoSurrogate.load_from_file(alamo_surrogate_dict)
     m.fs.reformer.build_model(surrogate, input_vars=inputs, output_vars=outputs)
-
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setlb(0.0)
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setub(50000.0)
+    m.fs.reformer.conversion.setlb(0.0)
+    m.fs.reformer.conversion.setub(1.0)
     m.fs.bypass_rejoin = Mixer(
         inlet_list = ["syngas_inlet", "bypass_inlet"],
         property_package = m.fs.thermo_params)
@@ -417,3 +420,7 @@ if __name__ == "__main__":
                 df[list(df.keys())[6]].append(999)
                 df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
                 continue
+    
+    df = pd.DataFrame(df)
+    df.to_csv("alamo_experiment.csv")
+

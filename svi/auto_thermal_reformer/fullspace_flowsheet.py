@@ -334,9 +334,10 @@ def make_initial_model(P,initialize=True):
         initialize_atr_flowsheet(m)
     return m
 
-def make_simulation_model(P,initialize=True):
+def make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True):
     m = make_initial_model(P,initialize=initialize)
-    
+    m.fs.feed.outlet.flow_mol[0].unfix()
+
     # Fix degrees of freedom for simulation model
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
     
@@ -351,8 +352,10 @@ def make_simulation_model(P,initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    m.fs.reformer.conversion.fix(0.95)
-    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(0.23)
+    m.fs.reformer.conversion.fix(X)
+    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(Bypass_Frac)
+    m.fs.reformer_mix.steam_inlet.flow_mol[0].fix(Flow_H2O)
+    m.fs.feed.outlet.flow_mol[0].fix(CH4_Feed)
     return m
 
 def add_obj_and_constraints(m):
@@ -490,7 +493,7 @@ if __name__ == "__main__":
 
     if simulation:
 
-        m = make_simulation_model(P = 3447379, initialize = True)
+        m = make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True)
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
         solve_kwds = dict(tee=True)
