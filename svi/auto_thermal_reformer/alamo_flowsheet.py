@@ -142,7 +142,6 @@ def create_instance(
     m.fs.reformer_surrogate.conversion.setlb(0.0)
     m.fs.reformer_surrogate.conversion.setub(1.0)
 
-
     # At this point we have a square (simulation) model. Now we must
     # unfix degrees of freedom, add an objective function, and add specification
     # constraints.
@@ -417,6 +416,7 @@ if __name__ == "__main__":
                 initialize_alamo_atr_flowsheet(m)
                 m.fs.reformer_bypass.inlet.temperature.unfix()
                 m.fs.reformer_bypass.inlet.flow_mol.unfix()
+
                 #m = make_simulation_model(X,P)
 
                 ######## OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
@@ -536,4 +536,3 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(df)
     df.to_csv("sweep_results_alamo.csv")
-    #m = create_instance(0.93, 1700000)
