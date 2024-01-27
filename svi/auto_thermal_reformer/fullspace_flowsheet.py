@@ -359,6 +359,8 @@ def make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True):
     return m
 
 def add_obj_and_constraints(m):
+    # Note that this function also unfixes degrees of freedom.
+
     ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(
         expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
@@ -377,6 +379,9 @@ def add_obj_and_constraints(m):
     # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
     @m.Constraint()
     def max_reformer_outlet_temp(m):
+        # Note that we use the reformer-recuperator inlet instead of the reformer
+        # outlet, as surrogate/implicit models may not have an
+        # "fs.reformer.outlet.temperature" variable
         return m.fs.reformer_recuperator.hot_side_inlet.temperature[0] <= 1200.0
 
     # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
@@ -426,7 +431,7 @@ def make_optimization_model(X,P,initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    
+
     # ACHIEVE A CONVERSION OF X IN AUTOTHERMAL REFORMER
     m.fs.reformer.conversion.fix(X)
 
@@ -436,7 +441,7 @@ df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], '
 
 def main(X,P):
     m = make_optimization_model(X,P)
-    solver = pyo.SolverFactory('ipopt', executable = "~/.local/bin/ipopt")
+    solver = pyo.SolverFactory('ipopt')
     solver.options = {"tol": 1e-7, "max_iter": 300}
     timer = TicTocTimer()
     timer.tic("starting timer")
