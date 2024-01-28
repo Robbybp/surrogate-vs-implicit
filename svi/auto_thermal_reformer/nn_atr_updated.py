@@ -51,7 +51,6 @@ from idaes.models.unit_models import (
     Product)
 from idaes.core.util.initialization import propagate_state
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
-from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 from idaes.core.surrogate.surrogate_block import SurrogateBlock
@@ -141,11 +140,11 @@ def build_nn_atr_flowsheet(m, conversion):
                 m.fs.steam_feed.flow_mol[0],
                 m.fs.reformer.conversion]
 
-    # define the outputs of the surrogate models. remove O2, C2H6, C3H8, C4H10 
+    # define the outputs of the surrogate models. remove O2, C4H10 
     # because they were not part of the NN training.
     outputs = [m.fs.reformer.heat_duty, m.fs.reformer.out_flow_mol, m.fs.reformer.out_temp, m.fs.reformer.out_H2,
-                m.fs.reformer.out_CO, m.fs.reformer.out_H2O, m.fs.reformer.out_CO2, m.fs.reformer.out_CH4,
-                m.fs.reformer.out_N2, m.fs.reformer.out_Ar]
+               m.fs.reformer.out_CO, m.fs.reformer.out_H2O, m.fs.reformer.out_CO2, m.fs.reformer.out_CH4, m.fs.reformer.out_C2H6,
+               m.fs.reformer.out_C3H8,m.fs.reformer.out_N2, m.fs.reformer.out_Ar]
 
     # build the surrogate for the Gibbs Reactor using the best keras model obtained
     keras_surrogate = KerasSurrogate.load_from_folder("keras_surrogate")
@@ -159,7 +158,12 @@ def build_nn_atr_flowsheet(m, conversion):
     m.fs.bypass_rejoin = Mixer(
         inlet_list = ["syngas_inlet", "bypass_inlet"],
         property_package = m.fs.thermo_params)
-
+    
+    # TODO: Toggle whether we apply enforce the surrogate training bounds
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setlb(0.0)
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setub(50000.0)
+    m.fs.reformer.conversion.setlb(0.0)
+    m.fs.reformer.conversion.setub(1.0)
 
     ########## CONNECT UNIT MODELS UPSTREAM OF SURROGATE REFORMER ##########  
 
@@ -383,15 +387,15 @@ if __name__ == "__main__":
 
             @m.Constraint()
             def link_C2H6(m):
-                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] <= 3.46e-7
+                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] == m.fs.reformer.out_C2H6
 
             @m.Constraint()
             def link_C3H8(m):
-                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] <= 2.27e-11
+                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] == m.fs.reformer.out_C3H8
 
             @m.Constraint()
             def link_C4H10(m):
-                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] <= 1.34e-15
+                return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] <= 1e-14
 
             @m.Constraint()
             def link_N2(m):
@@ -405,7 +409,7 @@ if __name__ == "__main__":
             def link_Ar(m):
                 return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer.out_Ar
             
-            solver = get_solver()
+            solver = pyo.SolverFactory('ipopt', executable = '~/.local/bin/ipopt')
             solver.options = {
                 "tol": 1e-7,
                 "max_iter": 300
