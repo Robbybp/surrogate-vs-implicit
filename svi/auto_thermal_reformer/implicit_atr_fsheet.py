@@ -160,7 +160,7 @@ def make_implicit(m):
 df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
 
 def main(X,P):
-    from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
+    from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
     m = make_optimization_model(X,P)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)

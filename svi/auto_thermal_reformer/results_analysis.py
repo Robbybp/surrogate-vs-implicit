@@ -33,43 +33,14 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
-from pyomo.common.timing import TicTocTimer
-from pyomo.network import Arc, SequentialDecomposition
-from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 
-from idaes.core import FlowsheetBlock
-from idaes.models.properties.modular_properties import GenericParameterBlock
-from idaes.core.util.model_statistics import degrees_of_freedom
-import idaes.core.util.scaling as iscale
-
-from idaes.models.unit_models import (
-    Mixer,
-    Heater,
-    HeatExchanger,
-    PressureChanger,
-    GibbsReactor,
-    Separator,
-    Feed,
-    Product,
-)
-from idaes.core.util.initialization import propagate_state
-from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
-from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
-from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
-
-# For initialization testing
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
-
-# For debugging purposes
-from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
-from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
-
 from svi.auto_thermal_reformer.fullspace_flowsheet import make_simulation_model
 
 import matplotlib.pyplot as plt
-#from matplotlib.colors import ListedColorMap
-#from matplotlib.patches import Patch
-#import seaborn as sns
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
+import seaborn as sns
 
 ###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
 
@@ -79,7 +50,10 @@ def validate_alamo_or_nn(fname = "alamo_experiment.csv"):
     # Parse the data needed for validation
     validation_inputs = df[['X', 'P', 'Steam', 'Bypass Frac', 'CH4 Feed']]
     
-    # Create an empty dataframe to store the objective value from the validation process
+    # Create an empty dataframe to store the objective value from the validation process.
+    # df_val_res stores the result of the full space simulation that takes surrogate DOF
+    # as inputs.
+
     df_val_res = {'X':[], 'P':[], 'Objective':[]} 
 
     for index, row in validation_inputs.iterrows():
@@ -126,27 +100,44 @@ def calculate_error_in_objectives(fname_1 = "fullspace_experiment.csv",
     df_val_res = pd.read_csv(fname_2)
     
     list_of_optimal_results = list()
+    list_of_invalid_indices = list()
 
     for index, row in df_fullspace.iterrows():
         if row['Termination'] == "optimal":
             list_of_optimal_results.append(index)
+    for index, row in df_val_res.iterrows():
+        if row['Objective'] == 999:
+            list_of_invalid_indices.append(index)
         
     df_fullspace_filtered = df_fullspace.iloc[list_of_optimal_results]
     df_val_res_filtered = df_val_res.iloc[list_of_optimal_results]
     
-    average_error = sum(abs(df_fullspace_filtered['Objective'] - df_val_res_filtered['Objective']))/len(list_of_optimal_results)
-    average_error = average_error*100
+    df_fullspace_filtered = df_fullspace_filtered.drop(list_of_invalid_indices, axis = 0)
+    df_val_res_filtered = df_val_res_filtered.drop(list_of_invalid_indices, axis = 0)
+
+    errors  = (abs(df_fullspace_filtered['Objective'] - df_val_res_filtered['Objective']) / df_fullspace_filtered['Objective']).tolist()
+    average_error = sum(errors) * 100 / len(df_val_res_filtered.index)
+
     if 'alamo' in fname_2:
         print("The average error in ALAMO is:",average_error, "%.")
     if 'nn' in fname_2:
         print("The average error in NN is:", average_error, "%.")
-    return average_error
 
-def plot_convergence_reliability():
+def plot_convergence_reliability(fname = 'implicit_experiment.csv'):
     data = pd.read_csv(fname)
+    
+    if 'full' in fname:
+        name = 'Full Space'
+    if 'implicit' in fname:
+        name = 'Implicit Function'
+    if 'alamo' in fname:
+        name = 'ALAMO Surrogate'
+    if 'nn' in fname:
+        name = 'Neural Network Surrogate'
+
     condition = data['Termination'] == 'optimal'
     data.loc[condition,'Termination'] = 1
-    data.loc[condition,'Termination'] = 0
+    data.loc[~condition,'Termination'] = 0
     
     data = data.drop('Unnamed: 0', axis = 1)
     data['Termination'] = data['Termination'].astype(float)
@@ -161,11 +152,11 @@ def plot_convergence_reliability():
                                        columns = 'P',
                                        aggfunc = 'first'),2)
 
-    plt.figure(figsize = (5,5))
-    ax = sns.heatmap(pivot_full, linewidths = 1, linecolor = 'darkgray', 
-                     linewidth = 1, cbar = False, cmap = ListedColorMap(['black','bisque']))
+    fig = plt.figure(figsize = (7,7))
+    ax = sns.heatmap(pivoting, linewidths = 1, linecolor = 'darkgray', 
+                     linewidth = 1, cbar = False, cmap = ListedColormap(['black','bisque']))
 
-    plt.title("Full Space Formulation", fontsize = 18.5)
+    plt.title(name+' Formulation', fontsize = 18.5)
     plt.xlabel("Pressure (MPa)", fontsize = 18.5)
     plt.ylabel("Conversion", fontsize = 18.5)
 
@@ -186,9 +177,9 @@ def plot_convergence_reliability():
                loc = 'upper left', borderaxespad = 0)
 
     plt.gca().invert_yaxis()
-    plt.show()
-    pass
+    fig.savefig('implicit_fs_plot', bbox_inches='tight')
 
 if __name__ == "__main__":
     validate_alamo_or_nn(fname = "alamo_experiment.csv")
-    #average_error = calculate_error_in_objectives(fname_1 = "fullspace_experiment.csv",fname_2 = "validation.csv")
+    calculate_error_in_objectives(fname_1 = "fullspace_experiment.csv",fname_2 = "alamo_validation.csv")
+    plot_convergence_reliability(fname = 'implicit_experiment.csv')
