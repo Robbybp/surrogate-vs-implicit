@@ -45,8 +45,8 @@ csv_data = pd.read_csv(fname)
 if 'Unnamed: 0' in csv_data.columns:
     csv_data = csv_data.drop('Unnamed: 0', axis=1)
 
-# Drop columns that contain values less than 1e-6 so that the NN can train properly
-csv_data = csv_data.drop(['C2H6','C3H8','C4H10','O2'], axis=1)
+# Drop columns that contain values less than 1e-14 so that the NN can train properly
+csv_data = csv_data.drop(['C4H10','O2'], axis=1)
 
 data = csv_data
 
