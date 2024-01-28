@@ -61,6 +61,9 @@ data_training, data_validation = split_training_validation(
     data, 0.8, seed=n_data
 ) 
 
+# Save the data_validation file
+data_validation.to_csv("data_validation.csv")
+
 # Define the parameter values to try
 activations = ["sigmoid", "tanh"]
 optimizers = ["Adam"]
