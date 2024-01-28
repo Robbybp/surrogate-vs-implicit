@@ -427,3 +427,6 @@ if __name__ == "__main__":
             df[list(df.keys())[5]].append(value(m.fs.steam_feed.flow_mol[0]))
             df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
             df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
+
+df = pd.DataFrame(df)
+df.to_csv('nn_experiment.csv')
