@@ -172,7 +172,7 @@ def create_nn_and_compare(fname = "data_atr.csv",
                 y_true_alamo = data_validation.iloc[:,4:][component].values
                 r2_alamo.append(r2_score(y_true_alamo,y_pred_alamo))
         
-        r2_df = pd.DataFrame({'R2-ALAMO': r2_alamo, 'R2-NN': r2_nn})
+        r2_df = pd.DataFrame({'Component': output_labels, 'R2-ALAMO': r2_alamo, 'R2-NN': r2_nn})
         r2_df.to_csv('R2_values.csv')
 
 if __name__ == "__main__":
