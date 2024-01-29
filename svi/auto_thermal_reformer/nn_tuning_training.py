@@ -45,7 +45,11 @@ tf.keras.backend.set_floatx('float64')
 
 # This function is to tune and train the neural network
 
-def create_nn(fname = "data_atr.csv", tune = False):
+def create_nn_and_compare(fname = "data_atr.csv", 
+                          tune = False, 
+                          alamo_surr = 'alamo_surrogate_atr.json', 
+                          compare_r2 = True):
+
     csv_data = pd.read_csv(fname) 
     if 'Unnamed: 0' in csv_data.columns:
         csv_data = csv_data.drop('Unnamed: 0', axis=1)
@@ -133,22 +137,13 @@ def create_nn(fname = "data_atr.csv", tune = False):
                             )
         
                             keras_surrogate.save_to_folder("keras_surrogate")
-    else:
-        model = keras.models.load_model('keras_surrogate')
-        return model, input_labels, output_labels, input_bounds, input_scaler, output_scaler
-
-# This function is to compare R2 coefficients from the ALAMO and NN parity plots.
-# These values should be similar to each other for us to compare optimization formulations.
-
-def compare_r2(data_validation = "data_validation.csv",
-               alamo_surr = "alamo_surrogate_atr.json"):
     
-    data_validation = pd.read_csv(data_validation)
+    if compare_r2 == True:
+        
+        # Load the NN
+        model = keras.models.load_model('keras_surrogate')
 
-    # Load the NN
-    model, input_labels, output_labels, input_bounds, input_scaler, output_scaler = create_nn(fname = "data_atr.csv", tune = False)
-
-    keras_surrogate = KerasSurrogate(
+        keras_surrogate = KerasSurrogate(
             model,
             input_labels=list(input_labels),
             output_labels=list(output_labels),
@@ -157,32 +152,34 @@ def compare_r2(data_validation = "data_validation.csv",
             output_scaler=output_scaler,
         )
 
-    # Load the ALAMO surrogate
-    alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr)
+        # Load the ALAMO surrogate
+        alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr)
 
-    # Predict output data with NN and ALAMO
-    predicted_output_data_nn = KerasSurrogate.evaluate_surrogate(keras_surrogate, data_validation.iloc[:,:4])
-    predicted_output_data_alamo = AlamoSurrogate.evaluate_surrogate(alamo_surrogate, data_validation.iloc[:,:4])
+        # Predict output data with NN and ALAMO
+        predicted_output_data_nn = KerasSurrogate.evaluate_surrogate(keras_surrogate, data_validation.iloc[:,:4])
+        predicted_output_data_alamo = AlamoSurrogate.evaluate_surrogate(alamo_surrogate, data_validation.iloc[:,:4])
 
-    #Calculate R2 for NN and ALAMO parity plots
-    r2_nn = list()
-    r2_alamo = list()
+        # Calculate R2 for NN and ALAMO parity plots
+        r2_nn = list()
+        r2_alamo = list()
 
-    for component in output_labels:
-        if component not in ['C4H10','O2']:
-            y_pred_nn = predicted_output_data_nn[component].values
-            y_true_nn = data_validation.iloc[:,:4][component].values
-            r2_nn.append(r2_score(y_true_nn,y_pred_nn))
-            y_pred_alamo = predicted_output_data_alamo[component].values
-            y_true_alamo = data_validation.iloc[:,:4][component].values
-            r2_alamo.append(r2_score(y_true_alamo,y_pred_alamo))
-
-    return r2_nn, r2_alamo
+        for component in output_labels:
+            if component not in ['C4H10','O2']:
+                y_pred_nn = predicted_output_data_nn[component].values
+                y_true_nn = data_validation.iloc[:,4:][component].values
+                r2_nn.append(r2_score(y_true_nn,y_pred_nn))
+                y_pred_alamo = predicted_output_data_alamo[component].values
+                y_true_alamo = data_validation.iloc[:,4:][component].values
+                r2_alamo.append(r2_score(y_true_alamo,y_pred_alamo))
+        
+        r2_df = pd.DataFrame({'R2-ALAMO': r2_alamo, 'R2-NN': r2_nn})
+        r2_df.to_csv('R2_values.csv')
 
 if __name__ == "__main__":
-    create_nn(fname = "data_atr.csv", tune = False)
-    compare_r2(data_validation = "data_validation.csv", alamo_surr = "alamo_surrogate_atr.json")
- 
+    create_nn_and_compare(fname = "data_atr.csv", 
+                          tune = False, 
+                          alamo_surr = 'alamo_surrogate_atr.json', 
+                          compare_r2 = True)
 
 
 
