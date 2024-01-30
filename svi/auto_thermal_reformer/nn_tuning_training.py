@@ -74,11 +74,11 @@ def create_nn_and_compare(fname = "data_atr.csv",
     data_validation.to_csv("data_validation.csv")
 
     # Define the parameter values to try
-    activations = ["sigmoid", "tanh"]
+    activations = ["tanh"] #["sigmoid", "tanh"]
     optimizers = ["Adam"]
     n_hidden_layers_values = np.arange(2,5,1).tolist()
     n_nodes_per_layer_values = np.arange(20,31,1).tolist()
-    epochs = 500
+    epochs = 500 
 
     loss, metrics = "mse", ["mae", "mse"]
     
@@ -180,7 +180,6 @@ if __name__ == "__main__":
                           tune = False, 
                           alamo_surr = 'alamo_surrogate_atr.json', 
                           compare_r2 = True)
-
 
 
 
