@@ -114,9 +114,7 @@ def create_instance(
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "CH4"],
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "C2H6"],
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "C3H8"],
-        #m.fs.reformer_surrogate.out_mole_frac_comp[0, "C4H10"],
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "N2"],
-        #m.fs.reformer_surrogate.out_mole_frac_comp[0, "O2"],
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "Ar"],
     ]
 
@@ -160,7 +158,7 @@ df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], '
 
 if __name__ == "__main__":
 
-    for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
+    for X in np.arange(0.90,0.98,0.01): 
         for P in np.arange(1447379,1947379,70000):
             m = create_instance(X, P, Flow_H2O = 250, Bypass_Frac = 0.3, CH4_Feed = 1250) 
             initialize_nn_atr_flowsheet(m)
