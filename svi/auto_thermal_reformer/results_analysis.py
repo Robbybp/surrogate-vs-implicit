@@ -194,6 +194,6 @@ def plot_convergence_reliability(fname = 'implicit_experiment.csv'):
     fig.savefig(name + ' Plot', bbox_inches='tight')
 
 if __name__ == "__main__":
-#    validate_alamo_or_nn(fname = "nn_experiment.csv")
-    calculate_error_in_objectives(fname_1 = "implicit_experiment.csv",fname_2 = "nn_validation.csv", fname_3 = "nn_experiment.csv")
-#    plot_convergence_reliability(fname = 'nn_experiment.csv')
+    validate_alamo_or_nn(fname = "nn_experiment.csv")
+    calculate_error_in_objectives(fname_1 = "implicit_experiment.csv", fname_2 = "nn_validation.csv", fname_3 = "nn_experiment.csv")
+    plot_convergence_reliability(fname = 'nn_experiment.csv')
