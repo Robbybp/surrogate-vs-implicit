@@ -47,6 +47,7 @@ argparser = argparse.ArgumentParser()
 # First positional argument is the file with data from the experiments
 argparser.add_argument("experiment_fname")
 argparser.add_argument("--validation-fname", default=None)
+argparser.add_argument("--fullspace-fname", default=None)
 
 ###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
 
@@ -54,6 +55,14 @@ def validate_alamo_or_nn(
     experiment_fname,
     validation_fname=None,
 ):
+    """Validate the results of an optimization with a surrogate model by using
+    the calculated inputs to simulate the original, "full space" model.
+
+    The main output is the objective function (outlet concentration of H2)
+    value obtained by simulating the full space model with the inputs from
+    optimization with the surrogate.
+
+    """
     df = pd.read_csv(experiment_fname)
 
     # Parse the data needed for validation
@@ -72,7 +81,13 @@ def validate_alamo_or_nn(
         Bypass_Frac = row['Bypass Frac']
         CH4_Feed = row['CH4 Feed']
 
-        m = make_simulation_model(X,P,Steam,Bypass_Frac,CH4_Feed)
+        m = make_simulation_model(
+            P,
+            conversion=X,
+            flow_H2O=Steam,
+            bypass_fraction=Bypass_Frac,
+            feed_flow_CH4=CH4_Feed,
+        )
         try:
             calc_var_kwds = dict(eps=1e-7)
             solve_kwds = dict(tee=True)
@@ -85,12 +100,14 @@ def validate_alamo_or_nn(
             )
             
             solver.solve(m, tee=True)
+            # TODO: Make sure the solution is feasible.
             df_val_res['X'].append(X)
             df_val_res['P'].append(P)
             df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
         except ValueError:
             df_val_res['X'].append(X)
             df_val_res['P'].append(P)
+            # TODO: Use something other than 999 to indicate a failed simulation
             df_val_res['Objective'].append(999)
 
     df_val_res = pd.DataFrame(df_val_res)
@@ -101,8 +118,10 @@ def validate_alamo_or_nn(
     return df_val_res
 
 
-def calculate_error_in_objectives(fname_1 = "fullspace_experiment.csv",
-                                  fname_2 = "alamo_validation_csv"):
+def calculate_error_in_objectives(
+    fname_1 = "fullspace_experiment.csv",
+    fname_2 = "alamo_validation_csv",
+):
     
     df_fullspace = pd.read_csv(fname_1)
     df_val_res = pd.read_csv(fname_2)
@@ -193,7 +212,7 @@ def plot_convergence_reliability(fname = 'implicit_experiment.csv'):
 if __name__ == "__main__":
     args = argparser.parse_args()
     print(args.experiment_fname)
-    validate_alamo_or_nn(args.experiment_fname, args.validation_fname)
-    #calculate_error_in_objectives(fname_1 = "implicit_experiment.csv", fname_2 = "nn_validation.csv", fname_3 = "nn_experiment.csv")
+    #validate_alamo_or_nn(args.experiment_fname, args.validation_fname)
+    calculate_error_in_objectives(args.fullspace_fname, args.experiment_fname)
     #plot_convergence_reliability(fname = 'nn_experiment.csv')
     #fig.savefig('implicit_fs_plot', bbox_inches='tight')
