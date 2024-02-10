@@ -408,8 +408,10 @@ if __name__ == "__main__":
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and 
     the maximum product temperature is 650 K.  
     """
-    for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
-        for P in np.arange(1447379,1947379,70000):
+    #for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
+    for X in [0.95,0.96,0.97]:
+        #for P in np.arange(1447379, 1947379, 70000):
+        for P in [1450000, 1650000, 1850000]:
             try: 
                 m = create_instance(X, P)
                 # Does this need to be applied after creating the surrogate? Why?

@@ -56,8 +56,10 @@ if __name__ == "__main__":
     optimization = not simulation
     visualize = False
     if optimization:
-        for X in np.arange(0.90,0.98,0.01):
-            for P in np.arange(1447379,1947379,70000):
+        #for X in np.arange(0.90,0.98,0.01):
+        for X in [0.95, 0.96, 0.97]:
+            #for P in np.arange(1447379,1947379,70000):
+            for P in [1450000, 1650000, 1850000]:
                 try:
                     main(X,P)
                 except AssertionError:

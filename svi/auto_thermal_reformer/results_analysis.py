@@ -43,19 +43,19 @@ from matplotlib.patches import Patch
 import seaborn as sns
 import argparse
 
-###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
-
 argparser = argparse.ArgumentParser()
 # First positional argument is the file with data from the experiments
 argparser.add_argument("experiment_fname")
 argparser.add_argument("--validation-fname", default=None)
+
+###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
 
 def validate_alamo_or_nn(
     experiment_fname,
     validation_fname=None,
 ):
     df = pd.read_csv(experiment_fname)
-    
+
     # Parse the data needed for validation
     validation_inputs = df[['X', 'P', 'Steam', 'Bypass Frac', 'CH4 Feed']]
     
@@ -100,49 +100,38 @@ def validate_alamo_or_nn(
 
     return df_val_res
 
-def calculate_error_in_objectives(fname_1 = "implicit_experiment.csv",
-                                  fname_2 = "alamo_validation.csv",
-                                  fname_3 = "alamo_experiment.csv"):
+
+def calculate_error_in_objectives(fname_1 = "fullspace_experiment.csv",
+                                  fname_2 = "alamo_validation_csv"):
     
-    df_implicit = pd.read_csv(fname_1)
+    df_fullspace = pd.read_csv(fname_1)
     df_val_res = pd.read_csv(fname_2)
-    df_surrogate = pd.read_csv(fname_3)
     
-    list_of_optimalsurr_results = list()
-    list_of_optimalimp_results = list()
-    intersected_list = list()
-    list_of_invalid_ind = list()
+    list_of_optimal_results = list()
+    list_of_invalid_indices = list()
 
-    for index, row in df_surrogate.iterrows():
+    for index, row in df_fullspace.iterrows():
         if row['Termination'] == "optimal":
-            list_of_optimalsurr_results.append(index)
-    
-    for index, row in df_implicit.iterrows():
-        if row['Termination'] == 'optimal':
-            list_of_optimalimp_results.append(index)
-
+            list_of_optimal_results.append(index)
     for index, row in df_val_res.iterrows():
         if row['Objective'] == 999:
-            list_of_invalid_ind.append(index)
-
-    for e in list_of_optimalsurr_results:
-        if e in list_of_optimalimp_results:
-            intersected_list.append(e)
-
-    for e in list_of_invalid_ind:
-        if e in intersected_list:
-            intersected_list.remove(e)
-
-    df_implicit_filtered = df_implicit.iloc[intersected_list]
-    df_val_res_filtered = df_val_res.iloc[intersected_list]
+            list_of_invalid_indices.append(index)
+        
+    df_fullspace_filtered = df_fullspace.iloc[list_of_optimal_results]
+    df_val_res_filtered = df_val_res.iloc[list_of_optimal_results]
     
-    errors  = (abs(df_implicit_filtered['Objective'] - df_val_res_filtered['Objective']) / df_implicit_filtered['Objective']).tolist()
+    df_fullspace_filtered = df_fullspace_filtered.drop(list_of_invalid_indices, axis = 0)
+    df_val_res_filtered = df_val_res_filtered.drop(list_of_invalid_indices, axis = 0)
+
+    errors  = (abs(df_fullspace_filtered['Objective'] - df_val_res_filtered['Objective']) / df_fullspace_filtered['Objective']).tolist()
+
     average_error = sum(errors) * 100 / len(df_val_res_filtered.index)
 
     if 'alamo' in fname_2:
         print("The average error in ALAMO is:",average_error, "%.")
     if 'nn' in fname_2:
         print("The average error in NN is:", average_error, "%.")
+
 
 def plot_convergence_reliability(fname = 'implicit_experiment.csv'):
     data = pd.read_csv(fname)
@@ -198,6 +187,7 @@ def plot_convergence_reliability(fname = 'implicit_experiment.csv'):
                loc = 'upper left', borderaxespad = 0)
 
     plt.gca().invert_yaxis()
+
     fig.savefig(name + ' Plot', bbox_inches='tight')
 
 if __name__ == "__main__":
@@ -206,3 +196,4 @@ if __name__ == "__main__":
     validate_alamo_or_nn(args.experiment_fname, args.validation_fname)
     #calculate_error_in_objectives(fname_1 = "implicit_experiment.csv", fname_2 = "nn_validation.csv", fname_3 = "nn_experiment.csv")
     #plot_convergence_reliability(fname = 'nn_experiment.csv')
+    #fig.savefig('implicit_fs_plot', bbox_inches='tight')
