@@ -540,4 +540,4 @@ if __name__ == "__main__":
         m.fs.reformer_bypass.split_fraction.display()
 
     if visualize:
-        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
+        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet", loop_forever=True)
