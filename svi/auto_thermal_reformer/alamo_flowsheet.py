@@ -58,13 +58,29 @@ from idaes.core.surrogate.alamopy import AlamoSurrogate
 from idaes.core.surrogate.surrogate_block import SurrogateBlock
 
 import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
+import svi.auto_thermal_reformer.config as config
+
+
+DEFAULT_SURROGATE_FNAME = "alamo_surrogate_atr.json"
+
+
+def _get_alamo_surrogate_fname():
+    # TODO: Accept arguments so we can override the default results dir.
+    # Note that this function is essentially hard-coding the default
+    # surrogate file.
+    default_results_dir = config.get_results_dir()
+    return os.path.join(default_results_dir, DEFAULT_SURROGATE_FNAME)
 
 
 def create_instance(
     conversion,
     pressure,
     initialize=True,
+    surrogate_fname=None,
 ):
+    if surrogate_fname is None:
+        surrogate_fname = _get_alamo_surrogate_fname()
+
     # Create a simulation model so we can explicitly ensure we have zero degrees
     # of freedom after replacing the reformer with the ALAMO surrogate.
     # Note that this fixes conversion to 0.95. We will have to set this later.
@@ -126,11 +142,8 @@ def create_instance(
     ]
 
     # build the surrogate for the Gibbs Reactor using the JSON file obtained before
-    # TODO: Make this json file an optional command-line input
-    dirname = os.path.dirname(__file__)
-    basename = "alamo_surrogate_atr.json"
-    alamo_surrogate_dict = os.path.join(dirname, basename)
-    surrogate = AlamoSurrogate.load_from_file(alamo_surrogate_dict)
+    surrogate = AlamoSurrogate.load_from_file(surrogate_fname)
+
     # The reformer surrogate contains 14 eq. constraints and 15 vars (one fixed)
     m.fs.reformer_surrogate.build_model(
         surrogate, input_vars=inputs, output_vars=outputs
@@ -384,13 +397,12 @@ def initialize_alamo_atr_flowsheet(m):
     m.fs.reformer_bypass.initialize()
 
 
-def make_simulation_model(X, P):
+def make_simulation_model(X, P, surrogate_fname=None):
+    if surrogate_fname is None:
+        surrogate_fname = _get_alamo_surrogate_fname()
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
-    dirname = os.path.dirname(__file__)
-    basename = "alamo_surrogate_atr.json"
-    fname = os.path.join(dirname, basename)
-    build_alamo_atr_flowsheet(m, alamo_surrogate_dict = fname, conversion = X)
+    build_alamo_atr_flowsheet(m, alamo_surrogate_fname, conversion = X)
     set_alamo_atr_flowsheet_inputs(m, P)
     initialize_alamo_atr_flowsheet(m)
     m.fs.reformer_bypass.inlet.temperature.unfix()
