@@ -41,7 +41,7 @@ def main():
     argparser = config.get_sweep_argparser()
     argparser.add_argument(
         "--fname",
-        default="sweep_results_alamo.csv",
+        default="alamo-sweep.csv",
         help="Base file name for parameter sweep results",
     )
     args = argparser.parse_args()
