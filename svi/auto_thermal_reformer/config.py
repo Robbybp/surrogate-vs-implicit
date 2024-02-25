@@ -7,11 +7,27 @@ filedir = os.path.dirname(__file__)
 
 
 def get_data_dir():
-    return os.path.join(filedir, "data")
+    datadir = os.path.join(filedir, "data")
+    if os.path.isfile(datadir):
+        raise OSError(
+            f"Default data dir {datadir} is already a file. Please specify a"
+            " different data dir via the --data-dir argument."
+        )
+    elif not os.path.isdir(datadir):
+        os.mkdir(datadir)
+    return datadir
 
 
 def get_results_dir():
-    return os.path.join(filedir, "results")
+    resultsdir = os.path.join(filedir, "results")
+    if os.path.isfile(resultsdir):
+        raise OSError(
+            f"Default results dir {resultsdir} is already a file. Please specify a"
+            " different results dir via the --results-dir argument."
+        )
+    elif not os.path.isdir(resultsdir):
+        os.mkdir(resultsdir)
+    return resultsdir
 
 
 def get_argparser():
