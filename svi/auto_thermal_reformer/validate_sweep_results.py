@@ -37,7 +37,9 @@ from pyomo.environ import (
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from svi.auto_thermal_reformer.fullspace_flowsheet import make_simulation_model
 import svi.auto_thermal_reformer.config as config
+from svi.auto_thermal_reformer.validate_inputs import validate_model_simulation
 from svi.validate import validate_solution
+from svi.external import add_external_function_libraries_to_environment
 
 import os
 import matplotlib.pyplot as plt
@@ -88,32 +90,12 @@ def validate_results(df, feastol=0.0):
             bypass_fraction=Bypass_Frac,
             feed_flow_CH4=CH4_Feed,
         )
-        try:
-            calc_var_kwds = dict(eps=1e-7)
-            solve_kwds = dict(tee=True)
-            solver = pyo.SolverFactory("ipopt")
-            solve_strongly_connected_components(
-                m,
-                solver=solver,
-                calc_var_kwds=calc_var_kwds,
-                solve_kwds=solve_kwds,
-            )
-
-            solver.solve(m, tee=True)
-
-            # Note that an infeasibility here is not a proof of infeasibility.
-            valid, violations = validate_solution(m, tolerance=feastol)
-
-            df_val_res['X'].append(X)
-            df_val_res['P'].append(P)
-            df_val_res['Feasible'].append(valid)
-            df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
-        except ValueError:
-            df_val_res['X'].append(X)
-            df_val_res['P'].append(P)
-            # TODO: Use something other than 999 to indicate a failed simulation
-            df_val_res['Objective'].append(999)
-            df_val_res["Feasible"].append(False)
+        add_external_function_libraries_to_environment(m)
+        valid, violations = validate_model_simulation(m, feastol=feastol)
+        df_val_res['X'].append(X)
+        df_val_res['P'].append(P)
+        df_val_res['Feasible'].append(valid)
+        df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
 
     df_val_res = pd.DataFrame(df_val_res)
     return df_val_res
