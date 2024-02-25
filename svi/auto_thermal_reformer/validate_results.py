@@ -106,6 +106,7 @@ def validate_results(df, feastol=0.0):
             df_val_res['P'].append(P)
             # TODO: Use something other than 999 to indicate a failed simulation
             df_val_res['Objective'].append(999)
+            df_val_res["Feasible"].append(False)
 
     df_val_res = pd.DataFrame(df_val_res)
     return df_val_res
