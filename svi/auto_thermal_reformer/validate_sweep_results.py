@@ -189,6 +189,8 @@ def main():
         else:
             validation_fname = experiment_basename + "-validation"
         print(f"No validation-fname provided. Default is: {validation_fname}")
+    else:
+        validation_fname = args.validation_fname
     validation_fpath = os.path.join(args.data_dir, validation_fname)
 
     input_df = pd.read_csv(args.experiment_fpath)
