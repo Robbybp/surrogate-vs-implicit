@@ -47,6 +47,13 @@ import seaborn as sns
 import argparse
 
 
+"""Script for validating the results of a parameter sweep by simulating
+with the full-space model and, if a baseline parameter sweep file is given,
+comparing errors between the simulation and this baseline.
+
+"""
+
+
 ###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
 
 def validate_results(df, feastol=0.0):
