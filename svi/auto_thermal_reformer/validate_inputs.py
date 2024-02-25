@@ -37,7 +37,7 @@ results
 def simulate_model(m, tee=True):
     calc_var_kwds = dict(eps=1e-7)
     solve_kwds = dict(tee=tee)
-    solver = pyo.SolverFactory("cyipopt")
+    solver = pyo.SolverFactory("ipopt")
     solve_strongly_connected_components(
         m,
         solver=solver,
@@ -48,15 +48,15 @@ def simulate_model(m, tee=True):
     return res
 
 
-def validate_model(m, feastol=0.0):
+def validate_model_simulation(m, feastol=0.0):
     try:
         simulate_model(m)
-    except ValueError:
+    except (ValueError, RuntimeError):
         # We sometimes get ValueErrors when Ipopt throws an error, even when the
         # solve is acceptable.
         pass
     valid, violations = validate_solution(m, tolerance=feastol)
-    return valid
+    return valid, violations
 
 
 def main():
@@ -100,7 +100,7 @@ def main():
     )
     m._obj = pyo.Objective(expr=0.0)
     add_external_function_libraries_to_environment(m)
-    validate_model(m, feastol=args.feastol)
+    validate_model_simulation(m, feastol=args.feastol)
 
 
 if __name__ == "__main__":
