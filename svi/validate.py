@@ -25,7 +25,17 @@ from idaes.core.util.model_statistics import large_residuals_set
 
 
 def validate_solution(model, tolerance=0.0):
-    violated_cons_reduced = large_residuals_set(model, tol=tolerance)
+    violated_cons = list(large_residuals_set(model, tol=tolerance))
+    con_residuals = []
+    for con in violated_cons:
+        if con.upper is not None:
+            uresid = pyo_value(con.body - con.upper)
+            if uresid > tolerance:
+                con_residuals.append((con, pyo_value(con.upper), uresid))
+        if con.lower is not None:
+            lresid = pyo_value(con.body - con.lower)
+            if lresid < - tolerance:
+                con_residuals.append((con, pyo_value(con.lower), lresid))
 
     vars_violating_bounds = []
     for var in model.component_data_objects(Var):
@@ -40,13 +50,13 @@ def validate_solution(model, tolerance=0.0):
             if lb_diff < - tolerance:
                 vars_violating_bounds.append((var, var.lb, lb_diff))
 
-    if violated_cons_reduced:
+    if con_residuals:
         print("WARNING: Constraints are violated!")
 
     if vars_violating_bounds:
         print("WARNING: There are variables violating their bounds!")
 
-    violations = (violated_cons_reduced, vars_violating_bounds)
+    violations = (con_residuals, vars_violating_bounds)
     valid = not any(violations)
 
     return valid, violations
