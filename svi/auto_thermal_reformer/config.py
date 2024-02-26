@@ -52,7 +52,8 @@ def get_parameter_samples(args):
     x_lo = 0.90
     x_hi = 0.97
     p_lo = 1447379.0
-    p_hi = 1947379.0
+    #p_hi = 1947379.0
+    p_hi = 1937379.0
     
     n_x = args.n1
     n_p = args.n2
