@@ -25,20 +25,34 @@ from pyomo.util.subsystems import identify_external_functions
 
 
 def get_external_function_libraries(model):
-    ef_exprs = []
-    for comp in model.component_data_objects(
-        (pyo.Constraint, pyo.Expression, pyo.Objective), active=True
-    ):
-        ef_exprs.extend(identify_external_functions(comp.expr))
-    unique_functions = []
-    fcn_set = set()
-    for expr in ef_exprs:
-        fcn = expr._fcn
-        data = (fcn._library, fcn._function)
-        if data not in fcn_set:
-            fcn_set.add(data)
-            unique_functions.append(data)
-    unique_libraries = [library for library, function in unique_functions]
+    # This implementation should be much faster, but it assumes that the model
+    # has all relevant external functions on it. Also, in the old implementation,
+    # I add a new library for each unique library-function pair. I'm not sure
+    # if there was a reason for this, so I'll keep the old implementation around
+    # for now.
+    library_set = set()
+    libraries = []
+    for comp in model.component_data_objects(pyo.ExternalFunction):
+        library = comp._library
+        fcn = comp._function
+        if library not in library_set:
+            library_set.add(library)
+            libraries.append(library)
+    return libraries
+    #ef_exprs = []
+    #for comp in model.component_data_objects(
+    #    (pyo.Constraint, pyo.Expression, pyo.Objective), active=True
+    #):
+    #    ef_exprs.extend(identify_external_functions(comp.expr))
+    #unique_functions = []
+    #fcn_set = set()
+    #for expr in ef_exprs:
+    #    fcn = expr._fcn
+    #    data = (fcn._library, fcn._function)
+    #    if data not in fcn_set:
+    #        fcn_set.add(data)
+    #        unique_functions.append(data)
+    #unique_libraries = [library for library, function in unique_functions]
     return unique_libraries
 
 
