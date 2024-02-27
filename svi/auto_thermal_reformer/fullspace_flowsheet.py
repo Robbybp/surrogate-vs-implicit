@@ -33,7 +33,7 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
-from pyomo.common.timing import TicTocTimer
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 from pyomo.network import Arc, SequentialDecomposition
 from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 
@@ -68,6 +68,7 @@ from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
+from svi.external import add_external_function_libraries_to_environment
 from svi.auto_thermal_reformer.reactor_model import add_reactor_model
 
 
@@ -473,7 +474,7 @@ def main(X,P):
     df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
-    simulation = False
+    simulation = True
     optimization = not simulation
     visualize = False
     if optimization:
@@ -509,35 +510,46 @@ if __name__ == "__main__":
                      df[list(df.keys())[6]].append(999)
                      df[list(df.keys())[7]].append(999)
    
-    df = pd.DataFrame(df)
-    df.to_csv('fullspace_experiment.csv')
+        df = pd.DataFrame(df)
+        df.to_csv('fullspace_experiment.csv')
 
     if simulation:
-
+        P = 1600000.0
+        timer = TicTocTimer()
+        htimer = HierarchicalTimer()
+        timer.tic()
         m = make_simulation_model(
             P,
-            conversion=X,
-            flow_H2O=Flow_H2O,
-            bypass_fraction=Bypass_Frac,
-            feed_flow_CH4=CH4_Feed,
+            #conversion=X,
+            #flow_H2O=Flow_H2O,
+            #bypass_fraction=Bypass_Frac,
+            #feed_flow_CH4=CH4_Feed,
             initialize=True,
         )
+        add_external_function_libraries_to_environment(m)
+        timer.toc("make-model")
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
         solve_kwds = dict(tee=True)
         solver = pyo.SolverFactory("ipopt")
+        htimer.start("root")
         solve_strongly_connected_components(
             m,
             solver=solver,
             calc_var_kwds=calc_var_kwds,
             solve_kwds=solve_kwds,
+            timer=htimer,
         )
+        htimer.stop("root")
+        timer.toc("solve-scc")
         solver.solve(m, tee=True)
+        timer.toc("solve-full")
 
         m.fs.reformer.report()
         m.fs.reformer_recuperator.report()
         m.fs.product.report()
         m.fs.reformer_bypass.split_fraction.display()
+        print(htimer)
 
     if visualize:
         m.fs.visualize("Auto-Thermal-Reformer-Flowsheet", loop_forever=True)
