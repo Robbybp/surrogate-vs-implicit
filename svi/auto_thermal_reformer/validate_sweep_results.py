@@ -74,7 +74,7 @@ def validate_results(df, feastol=0.0):
     # df_val_res stores the result of the full space simulation that takes surrogate DOF
     # as inputs.
 
-    df_val_res = {'X':[], 'P':[], 'Feasible': [], 'Objective':[]}
+    df_val_res = {'X':[], 'P':[], 'Feasible': [], 'Infeasibility': [], 'Objective':[]}
 
     for index, row in validation_inputs.iterrows():
         X = row['X']
@@ -92,8 +92,14 @@ def validate_results(df, feastol=0.0):
         )
         add_external_function_libraries_to_environment(m)
         valid, violations = validate_model_simulation(m, feastol=feastol)
+        con_violations, bound_violations = violations
+        default = (None, None, 0.0)
+        con_infeas = abs(max(con_violations, key=lambda item: abs(item[2]), default=default)[2])
+        bound_infeas = abs(max(bound_violations, key=lambda item: abs(item[2]), default=default)[2])
+        infeas = max(con_infeas, bound_infeas)
         df_val_res['X'].append(X)
         df_val_res['P'].append(P)
+        df_val_res['Infeasibility'].append(infeas)
         df_val_res['Feasible'].append(valid)
         df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
 
