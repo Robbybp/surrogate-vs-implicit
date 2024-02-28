@@ -63,12 +63,27 @@ from idaes.core.surrogate.keras_surrogate import (
 )
 
 import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
+import svi.auto_thermal_reformer.config as config
+
+DEFAULT_SURROGATE_FNAME = "keras_surrogate"
+
+
+def _get_nn_surrogate_fname():
+    # TODO: Accept arguments so we can override the default results dir.
+    # Note that this function is essentially hard-coding the default
+    # surrogate file.
+    default_results_dir = config.get_results_dir()
+    return os.path.join(default_results_dir, DEFAULT_SURROGATE_FNAME)
 
 def create_instance(
     conversion,
     pressure,
     initialize=True,
+    surrogate_fname=None
 ):
+
+    if surrogate_fname is None:
+        surrogate_fname = _get_nn_surrogate_fname()
 
     m = fullspace.make_simulation_model(pressure, initialize = True)
 
@@ -118,7 +133,7 @@ def create_instance(
 
     dirname = os.path.dirname(__file__)
     data_dir = os.path.join(dirname, "data")
-    basename = "keras_surrogate_2"
+    basename = "keras_surrogate"
     keras_surrogate = os.path.join(data_dir, basename)
 
     keras_surrogate = KerasSurrogate.load_from_folder(keras_surrogate)
@@ -185,4 +200,4 @@ if __name__ == "__main__":
             df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 df = pd.DataFrame(df)
-df.to_csv('nn_experiment_elim.csv')
+df.to_csv('nn_experiment.csv')
