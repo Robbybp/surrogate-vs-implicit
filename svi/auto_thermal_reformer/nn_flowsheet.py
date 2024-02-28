@@ -67,12 +67,10 @@ import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
 def create_instance(
     conversion,
     pressure,
-    Flow_H2O,
-    Bypass_Frac,
-    CH4_Feed,
     initialize=True,
 ):
-    m = fullspace.make_simulation_model(conversion, pressure, Flow_H2O, Bypass_Frac, CH4_Feed, initialize=True)
+
+    m = fullspace.make_simulation_model(pressure, initialize = True)
 
     for con in m.fs.reformer.component_objects(pyo.Constraint):
         con.deactivate()
@@ -119,10 +117,12 @@ def create_instance(
     ]
 
     dirname = os.path.dirname(__file__)
-    basename = "keras_surrogate" 
-    keras_surrogate = os.path.join(dirname, basename)
-    
-    keras_surrogate = KerasSurrogate.load_from_folder("keras_surrogate")
+    data_dir = os.path.join(dirname, "data")
+    basename = "keras_surrogate_2"
+    keras_surrogate = os.path.join(data_dir, basename)
+
+    keras_surrogate = KerasSurrogate.load_from_folder(keras_surrogate)
+
     m.fs.reformer_surrogate.build_model(
     keras_surrogate,
     formulation=KerasSurrogate.Formulation.FULL_SPACE,
@@ -160,12 +160,12 @@ if __name__ == "__main__":
 
     for X in np.arange(0.90,0.98,0.01): 
         for P in np.arange(1447379,1947379,70000):
-            m = create_instance(X, P, Flow_H2O = 250, Bypass_Frac = 0.3, CH4_Feed = 1250) 
+            m = create_instance(X, P) 
             initialize_nn_atr_flowsheet(m)
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
             
-            solver = pyo.SolverFactory('ipopt', executable = '~/local/bin/ipopt')
+            solver = pyo.SolverFactory('ipopt', executable = '~/.local/bin/ipopt')
             solver.options = {
                 "tol": 1e-7,
                 "max_iter": 300
@@ -185,4 +185,4 @@ if __name__ == "__main__":
             df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 df = pd.DataFrame(df)
-df.to_csv('nn_experiment.csv')
+df.to_csv('nn_experiment_elim.csv')
