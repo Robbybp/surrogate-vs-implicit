@@ -33,7 +33,7 @@ from pyomo.environ import (
     value,
     units as pyunits,
 )
-from pyomo.common.timing import TicTocTimer
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 from pyomo.network import Arc, SequentialDecomposition
 from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 
@@ -68,6 +68,7 @@ from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
+from svi.external import add_external_function_libraries_to_environment
 from svi.auto_thermal_reformer.reactor_model import add_reactor_model
 
 
@@ -325,22 +326,34 @@ def initialize_atr_flowsheet(m):
     m.fs.intercooler_s2.initialize()
     m.fs.reformer_bypass.initialize()
 
-def make_initial_model(P,initialize=True):
+
+def make_initial_model(P, initialize=True):
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
     build_atr_flowsheet(m)
-    set_atr_flowsheet_inputs(m,P)
+    set_atr_flowsheet_inputs(m, P)
     if initialize:
         initialize_atr_flowsheet(m)
     return m
 
-def make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True):
-    m = make_initial_model(P,initialize=initialize)
-    m.fs.feed.outlet.flow_mol[0].unfix()
+
+def make_simulation_model(
+    pressure,
+    conversion=0.95,
+    flow_H2O=None,
+    bypass_fraction=0.23,
+    feed_flow_CH4=None,
+    initialize=True,
+):
+    """
+    For backwards compatibility, conversion and bypass_fraction have the same
+    default values they have always had.
+    """
+    m = make_initial_model(pressure, initialize=initialize)
 
     # Fix degrees of freedom for simulation model
     m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
-    
+
     m.fs.reformer.conv_constraint = Constraint(
         expr=m.fs.reformer.conversion
         * m.fs.reformer.inlet.flow_mol[0]
@@ -352,11 +365,15 @@ def make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True):
             * m.fs.reformer.outlet.mole_frac_comp[0, "CH4"]
         )
     )
-    m.fs.reformer.conversion.fix(X)
-    m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(Bypass_Frac)
-    m.fs.reformer_mix.steam_inlet.flow_mol[0].fix(Flow_H2O)
-    m.fs.feed.outlet.flow_mol[0].fix(CH4_Feed)
+    m.fs.reformer.conversion.fix(conversion)
+    if bypass_fraction is not None:
+        m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(bypass_fraction)
+    if flow_H2O is not None:
+        m.fs.reformer_mix.steam_inlet.flow_mol[0].fix(flow_H2O)
+    if feed_flow_CH4 is not None:
+        m.fs.feed.outlet.flow_mol[0].fix(feed_flow_CH4)
     return m
+
 
 def add_obj_and_constraints(m):
     # Note that this function also unfixes degrees of freedom.
@@ -407,7 +424,7 @@ def make_optimization_model(X,P,initialize=True):
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and
     the maximum product temperature is 650 K.
     """
-    m = make_initial_model(P,initialize=initialize)
+    m = make_initial_model(P, initialize=initialize)
 
     # TODO: Optionally solve the simulation model at this point so we start
     # the optimization problem with no primal infeasibility (other than due
@@ -442,7 +459,7 @@ df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], '
 def main(X,P):
     m = make_optimization_model(X,P)
     solver = pyo.SolverFactory('ipopt')
-    solver.options = {"tol": 1e-7, "max_iter": 300}
+    solver.options = {"tol": 1e-7, "max_iter": 1000}
     timer = TicTocTimer()
     timer.tic("starting timer")
     results = solver.solve(m, tee=True)
@@ -457,7 +474,7 @@ def main(X,P):
     df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
-    simulation = False
+    simulation = True
     optimization = not simulation
     visualize = False
     if optimization:
@@ -493,28 +510,46 @@ if __name__ == "__main__":
                      df[list(df.keys())[6]].append(999)
                      df[list(df.keys())[7]].append(999)
    
-    df = pd.DataFrame(df)
-    df.to_csv('fullspace_experiment.csv')
+        df = pd.DataFrame(df)
+        df.to_csv('fullspace_experiment.csv')
 
     if simulation:
-
-        m = make_simulation_model(X,P,Flow_H2O,Bypass_Frac,CH4_Feed,initialize=True)
+        P = 1600000.0
+        timer = TicTocTimer()
+        htimer = HierarchicalTimer()
+        timer.tic()
+        m = make_simulation_model(
+            P,
+            #conversion=X,
+            #flow_H2O=Flow_H2O,
+            #bypass_fraction=Bypass_Frac,
+            #feed_flow_CH4=CH4_Feed,
+            initialize=True,
+        )
+        add_external_function_libraries_to_environment(m)
+        timer.toc("make-model")
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
         solve_kwds = dict(tee=True)
         solver = pyo.SolverFactory("ipopt")
+        htimer.start("root")
         solve_strongly_connected_components(
             m,
             solver=solver,
             calc_var_kwds=calc_var_kwds,
             solve_kwds=solve_kwds,
+            timer=htimer,
         )
+        htimer.stop("root")
+        timer.toc("solve-scc")
         solver.solve(m, tee=True)
+        timer.toc("solve-full")
 
         m.fs.reformer.report()
         m.fs.reformer_recuperator.report()
         m.fs.product.report()
         m.fs.reformer_bypass.split_fraction.display()
+        print(htimer)
 
     if visualize:
-        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
+        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet", loop_forever=True)
