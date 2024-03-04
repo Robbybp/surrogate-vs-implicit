@@ -44,11 +44,17 @@ def main():
         default="nn-sweep.csv",
         help="Base file name for parameter sweep results",
     )
+
+    argparser.add_argument(
+        "--surrogate_fname",
+        default=DEFAULT_SURROGATE_FNAME,
+        help="File name for the surrogate",
+    )
+
     args = argparser.parse_args()
 
-    # TODO: This should be configurable by CLI
-    surrogate_fname = os.path.join(args.data_dir, DEFAULT_SURROGATE_FNAME)
-    output_fpath = os.path.join(args.data_dir, args.fname)
+    surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
+    output_fpath = os.path.join(args.data_dir, args.fname, args.surrogate_fname)
 
     df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
 
