@@ -131,12 +131,12 @@ def create_instance(
         m.fs.reformer_surrogate.out_mole_frac_comp[0, "Ar"],
     ]
 
-    dirname = os.path.dirname(__file__)
-    data_dir = os.path.join(dirname, "data")
-    basename = "keras_surrogate"
-    keras_surrogate = os.path.join(data_dir, basename)
+    #dirname = os.path.dirname(__file__)
+    #data_dir = os.path.join(dirname, "data")
+    #basename = "keras_surrogate_low_rel"
+    #keras_surrogate = os.path.join(data_dir, basename)
 
-    keras_surrogate = KerasSurrogate.load_from_folder(keras_surrogate)
+    keras_surrogate = KerasSurrogate.load_from_folder(surrogate_fname)
 
     m.fs.reformer_surrogate.build_model(
     keras_surrogate,
@@ -169,35 +169,35 @@ def initialize_nn_atr_flowsheet(m):
     m.fs.reformer_bypass.initialize()
 
 
-df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
-
-if __name__ == "__main__":
-
-    for X in np.arange(0.90,0.98,0.01): 
-        for P in np.arange(1447379,1947379,70000):
-            m = create_instance(X, P) 
-            initialize_nn_atr_flowsheet(m)
-            m.fs.reformer_bypass.inlet.temperature.unfix()
-            m.fs.reformer_bypass.inlet.flow_mol.unfix()
-            
-            solver = pyo.SolverFactory('ipopt', executable = '~/.local/bin/ipopt')
-            solver.options = {
-                "tol": 1e-7,
-                "max_iter": 300
-            }
-
-            timer = TicTocTimer()
-            timer.tic('starting timer')
-            results = solver.solve(m, tee=True)
-            dT = timer.toc('end')
-            df[list(df.keys())[0]].append(X)
-            df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append(results.solver.termination_condition)
-            df[list(df.keys())[3]].append(dT)
-            df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0, 'H2']))
-            df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-            df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
-            df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
-
-df = pd.DataFrame(df)
-df.to_csv('nn_experiment.csv')
+#df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
+#
+#if __name__ == "__main__":
+#
+#    for X in np.arange(0.90,0.98,0.01): 
+#        for P in np.arange(1447379,1947379,70000):
+#            m = create_instance(X, P) 
+#            initialize_nn_atr_flowsheet(m)
+#            m.fs.reformer_bypass.inlet.temperature.unfix()
+#            m.fs.reformer_bypass.inlet.flow_mol.unfix()
+#            
+#            solver = pyo.SolverFactory('ipopt', executable = '~/.local/bin/ipopt')
+#            solver.options = {
+#                "tol": 1e-7,
+#                "max_iter": 300
+#            }
+#
+#            timer = TicTocTimer()
+#            timer.tic('starting timer')
+#            results = solver.solve(m, tee=True)
+#            dT = timer.toc('end')
+#            df[list(df.keys())[0]].append(X)
+#            df[list(df.keys())[1]].append(P)
+#            df[list(df.keys())[2]].append(results.solver.termination_condition)
+#            df[list(df.keys())[3]].append(dT)
+#            df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0, 'H2']))
+#            df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+#            df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
+#            df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
+#
+#df = pd.DataFrame(df)
+#df.to_csv('nn_experiment.csv')
