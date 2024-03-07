@@ -530,20 +530,28 @@ if __name__ == "__main__":
         timer.toc("make-model")
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
-        solve_kwds = dict(tee=True)
-        solver = pyo.SolverFactory("ipopt")
+        solve_kwds = dict(tee=False)
+        ipopt = pyo.SolverFactory("ipopt")
+        solver = pyo.SolverFactory("scipy.fsolve")
+        #scalar_solver = pyo.SolverFactory("scipy.secant-newton")
+
         htimer.start("root")
+        htimer.start("solve-scc")
         solve_strongly_connected_components(
             m,
             solver=solver,
-            calc_var_kwds=calc_var_kwds,
             solve_kwds=solve_kwds,
+            use_calc_var=False,
+            calc_var_kwds=calc_var_kwds,
             timer=htimer,
         )
-        htimer.stop("root")
+        htimer.stop("solve-scc")
         timer.toc("solve-scc")
-        solver.solve(m, tee=True)
+        htimer.start("full model post-solve")
+        ipopt.solve(m, tee=True)
+        htimer.stop("full model post-solve")
         timer.toc("solve-full")
+        htimer.stop("root")
 
         m.fs.reformer.report()
         m.fs.reformer_recuperator.report()
