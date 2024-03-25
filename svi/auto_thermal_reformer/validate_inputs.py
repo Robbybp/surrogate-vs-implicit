@@ -35,8 +35,9 @@ results
 
 
 def simulate_model(m, tee=True):
-    #calc_var_kwds = dict(eps=1e-7)
-    #solver = pyo.SolverFactory("ipopt")
+    # Use scipy.fsolve (Powell trust region) as it seems a little more
+    # reliable than Ipopt, and is not slower for small systems, despite
+    # SciPy's implementation not exploiting sparsity.
     solver = pyo.SolverFactory("scipy.fsolve")
     solve_strongly_connected_components(
         m,
