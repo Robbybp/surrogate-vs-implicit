@@ -54,10 +54,6 @@ def main(X,P):
 
 
 if __name__ == "__main__":
-    simulation = False
-    optimization = not simulation
-    visualize = False
-
     argparser = config.get_sweep_argparser()
     argparser.add_argument(
         "--fname",
@@ -69,63 +65,40 @@ if __name__ == "__main__":
 
     fpath = os.path.join(args.data_dir, args.fname)
 
-    if optimization:
-        #for X in np.arange(0.90,0.98,0.01):
-        #for X in [0.95, 0.96, 0.97]:
-        #    #for P in np.arange(1447379,1947379,70000):
-        #    for P in [1450000, 1650000, 1850000]:
-        for X, P in xp_samples:
-            try:
-                main(X,P)
-            except AssertionError:
-                 df[list(df.keys())[0]].append(X)
-                 df[list(df.keys())[1]].append(P)
-                 df[list(df.keys())[2]].append("AMPL Error")
-                 df[list(df.keys())[3]].append(999)
-                 df[list(df.keys())[4]].append(999)
-                 df[list(df.keys())[5]].append(999)
-                 df[list(df.keys())[6]].append(999)
-                 df[list(df.keys())[7]].append(999)
-            except OverflowError:
-                 df[list(df.keys())[0]].append(X)
-                 df[list(df.keys())[1]].append(P)
-                 df[list(df.keys())[2]].append("Overflow Error")
-                 df[list(df.keys())[3]].append(999)
-                 df[list(df.keys())[4]].append(999)
-                 df[list(df.keys())[5]].append(999)
-                 df[list(df.keys())[6]].append(999)
-                 df[list(df.keys())[7]].append(999)
-            except RuntimeError:
-                 df[list(df.keys())[0]].append(X)
-                 df[list(df.keys())[1]].append(P)
-                 df[list(df.keys())[2]].append("Runtime Error")
-                 df[list(df.keys())[3]].append(999)
-                 df[list(df.keys())[4]].append(999)
-                 df[list(df.keys())[5]].append(999)
-                 df[list(df.keys())[6]].append(999)
-                 df[list(df.keys())[7]].append(999)
+    #for X in np.arange(0.90,0.98,0.01):
+    #for X in [0.95, 0.96, 0.97]:
+    #    #for P in np.arange(1447379,1947379,70000):
+    #    for P in [1450000, 1650000, 1850000]:
+    for X, P in xp_samples:
+        try:
+            main(X,P)
+        except AssertionError:
+             df[list(df.keys())[0]].append(X)
+             df[list(df.keys())[1]].append(P)
+             df[list(df.keys())[2]].append("AMPL Error")
+             df[list(df.keys())[3]].append(999)
+             df[list(df.keys())[4]].append(999)
+             df[list(df.keys())[5]].append(999)
+             df[list(df.keys())[6]].append(999)
+             df[list(df.keys())[7]].append(999)
+        except OverflowError:
+             df[list(df.keys())[0]].append(X)
+             df[list(df.keys())[1]].append(P)
+             df[list(df.keys())[2]].append("Overflow Error")
+             df[list(df.keys())[3]].append(999)
+             df[list(df.keys())[4]].append(999)
+             df[list(df.keys())[5]].append(999)
+             df[list(df.keys())[6]].append(999)
+             df[list(df.keys())[7]].append(999)
+        except RuntimeError:
+             df[list(df.keys())[0]].append(X)
+             df[list(df.keys())[1]].append(P)
+             df[list(df.keys())[2]].append("Runtime Error")
+             df[list(df.keys())[3]].append(999)
+             df[list(df.keys())[4]].append(999)
+             df[list(df.keys())[5]].append(999)
+             df[list(df.keys())[6]].append(999)
+             df[list(df.keys())[7]].append(999)
    
     df = pd.DataFrame(df)
     df.to_csv(fpath)
-
-    if simulation:
-
-        m = make_simulation_model(P = 3447379, initialize = True)
-        calc_var_kwds = dict(eps=1e-7)
-        solve_kwds = dict(tee=True)
-        solver = pyo.SolverFactory("ipopt")
-        solve_strongly_connected_components(
-            m,
-            solver=solver,
-            calc_var_kwds=calc_var_kwds,
-            solve_kwds=solve_kwds,
-        )
-        solver.solve(m, tee=True)
-
-        m.fs.reformer.report()
-        m.fs.reformer_recuperator.report()
-        m.fs.product.report()
-        m.fs.reformer_bypass.split_fraction.display()
-
-    if visualize:
-        m.fs.visualize("Auto-Thermal-Reformer-Flowsheet")
