@@ -69,8 +69,8 @@ def main():
     )
     argparser.add_argument(
         "--feastol",
-        default=1e-6,
-        help="Tolerance used to check feasibility of parameters",
+        default=1e-5,
+        help="Tolerance used to check feasibility of parameters (default=1e-5)",
     )
     argparser.add_argument(
         "--row",
