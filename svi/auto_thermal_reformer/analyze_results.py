@@ -138,6 +138,10 @@ def analyze_results(
             "Of these, the max relative objective difference,"
             f" (experiment - baseline) / baseline, is {max(obj_errors)}"
         )
+        print(
+            "Of these, the min relative objective difference,"
+            f" (experiment - baseline) / baseline, is {min(obj_errors)}"
+        )
         # median objective error?
 
 
