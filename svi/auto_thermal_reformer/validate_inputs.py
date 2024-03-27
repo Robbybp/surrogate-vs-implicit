@@ -35,16 +35,18 @@ results
 
 
 def simulate_model(m, tee=True):
-    calc_var_kwds = dict(eps=1e-7)
-    solve_kwds = dict(tee=tee)
-    solver = pyo.SolverFactory("ipopt")
+    # Use scipy.fsolve (Powell trust region) as it seems a little more
+    # reliable than Ipopt, and is not slower for small systems, despite
+    # SciPy's implementation not exploiting sparsity.
+    solver = pyo.SolverFactory("scipy.fsolve")
     solve_strongly_connected_components(
         m,
         solver=solver,
-        calc_var_kwds=calc_var_kwds,
-        solve_kwds=solve_kwds,
+        use_calc_var=False,
+        # Hard-code tee=False for sub-solvers
+        solve_kwds=dict(tee=False),
     )
-    res = solver.solve(m, tee=tee)
+    res = pyo.SolverFactory("ipopt").solve(m, tee=tee)
     return res
 
 
@@ -67,8 +69,8 @@ def main():
     )
     argparser.add_argument(
         "--feastol",
-        default=1e-6,
-        help="Tolerance used to check feasibility of parameters",
+        default=1e-5,
+        help="Tolerance used to check feasibility of parameters (default=1e-5)",
     )
     argparser.add_argument(
         "--row",

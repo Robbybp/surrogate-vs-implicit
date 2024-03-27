@@ -71,6 +71,8 @@ from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 from svi.external import add_external_function_libraries_to_environment
 from svi.auto_thermal_reformer.reactor_model import add_reactor_model
 
+import argparse
+
 
 def build_atr_flowsheet(m):
     ########## ADD THERMODYNAMIC PROPERTIES ##########
@@ -474,46 +476,19 @@ def main(X,P):
     df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
-    simulation = True
-    optimization = not simulation
-    visualize = False
-    if optimization:
-        for X in np.arange(0.90,0.98,0.01):
-            for P in np.arange(1447379,1947379,70000):
-                try:
-                    main(X,P)
-                except AssertionError:
-                     df[list(df.keys())[0]].append(X)
-                     df[list(df.keys())[1]].append(P)
-                     df[list(df.keys())[2]].append("AMPL Error")
-                     df[list(df.keys())[3]].append(999)
-                     df[list(df.keys())[4]].append(999)
-                     df[list(df.keys())[5]].append(999)
-                     df[list(df.keys())[6]].append(999)
-                     df[list(df.keys())[7]].append(999)
-                except OverflowError:
-                     df[list(df.keys())[0]].append(X)
-                     df[list(df.keys())[1]].append(P)
-                     df[list(df.keys())[2]].append("Overflow Error")
-                     df[list(df.keys())[3]].append(999)
-                     df[list(df.keys())[4]].append(999)
-                     df[list(df.keys())[5]].append(999)
-                     df[list(df.keys())[6]].append(999)
-                     df[list(df.keys())[7]].append(999)
-                except RuntimeError:
-                     df[list(df.keys())[0]].append(X)
-                     df[list(df.keys())[1]].append(P)
-                     df[list(df.keys())[2]].append("Runtime Error")
-                     df[list(df.keys())[3]].append(999)
-                     df[list(df.keys())[4]].append(999)
-                     df[list(df.keys())[5]].append(999)
-                     df[list(df.keys())[6]].append(999)
-                     df[list(df.keys())[7]].append(999)
-   
-        df = pd.DataFrame(df)
-        df.to_csv('fullspace_experiment.csv')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--optimize", action="store_true", default=False)
+    parser.add_argument("--visualize", action="store_true", default=False)
+    args = parser.parse_args()
 
-    if simulation:
+    simulate = not args.optimize
+    if args.optimize:
+        P = 1600000.0
+        X = 0.95
+        m = make_optimization_model(X, P, initialize=True)
+        res = pyo.SolverFactory("ipopt").solve(m, tee=True)
+
+    elif simulate:
         P = 1600000.0
         timer = TicTocTimer()
         htimer = HierarchicalTimer()
@@ -530,20 +505,28 @@ if __name__ == "__main__":
         timer.toc("make-model")
         # NOTE: This relies on recent Pyomo PRs
         calc_var_kwds = dict(eps=1e-7)
-        solve_kwds = dict(tee=True)
-        solver = pyo.SolverFactory("ipopt")
+        solve_kwds = dict(tee=False)
+        ipopt = pyo.SolverFactory("ipopt")
+        solver = pyo.SolverFactory("scipy.fsolve")
+        #scalar_solver = pyo.SolverFactory("scipy.secant-newton")
+
         htimer.start("root")
+        htimer.start("solve-scc")
         solve_strongly_connected_components(
             m,
             solver=solver,
-            calc_var_kwds=calc_var_kwds,
             solve_kwds=solve_kwds,
-            timer=htimer,
+            use_calc_var=False,
+            calc_var_kwds=calc_var_kwds,
+            #timer=htimer,
         )
-        htimer.stop("root")
+        htimer.stop("solve-scc")
         timer.toc("solve-scc")
-        solver.solve(m, tee=True)
+        htimer.start("full model post-solve")
+        ipopt.solve(m, tee=True)
+        htimer.stop("full model post-solve")
         timer.toc("solve-full")
+        htimer.stop("root")
 
         m.fs.reformer.report()
         m.fs.reformer_recuperator.report()
@@ -551,5 +534,5 @@ if __name__ == "__main__":
         m.fs.reformer_bypass.split_fraction.display()
         print(htimer)
 
-    if visualize:
+    if args.visualize:
         m.fs.visualize("Auto-Thermal-Reformer-Flowsheet", loop_forever=True)
