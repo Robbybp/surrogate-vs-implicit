@@ -71,7 +71,7 @@ def create_nn_and_compare(fname = "data_atr.csv",
     ) 
 
     # Save the data_validation file
-    data_validation.to_csv("data_validation.csv")
+    #data_validation.to_csv("data_validation.csv")
 
     # Define the parameter values to try
     activations = ["tanh"] #["sigmoid", "tanh"]
@@ -141,7 +141,7 @@ def create_nn_and_compare(fname = "data_atr.csv",
     if compare_r2 == True:
         
         # Load the NN
-        model = keras.models.load_model('keras_surrogate')
+        model = keras.models.load_model('keras_surrogate_high_rel')
 
         keras_surrogate = KerasSurrogate(
             model,
@@ -154,11 +154,14 @@ def create_nn_and_compare(fname = "data_atr.csv",
 
         # Load the ALAMO surrogate
         alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr)
+        data_validation = pd.read_csv("Users/sbugosen/Downloads/data_validation.csv") 
+        if 'Unnamed: 0' in data_validation.columns:
+            data_validation = data_validation.drop('Unnamed: 0', axis=1)
 
         # Predict output data with NN and ALAMO
         predicted_output_data_nn = KerasSurrogate.evaluate_surrogate(keras_surrogate, data_validation.iloc[:,:4])
         predicted_output_data_alamo = AlamoSurrogate.evaluate_surrogate(alamo_surrogate, data_validation.iloc[:,:4])
-
+        predicted_output_data_nn.to_csv("predicted_output_data_nn.csv")
         # Calculate R2 for NN and ALAMO parity plots
         r2_nn = list()
         r2_alamo = list()

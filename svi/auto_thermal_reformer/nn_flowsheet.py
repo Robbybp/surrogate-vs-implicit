@@ -65,7 +65,7 @@ from idaes.core.surrogate.keras_surrogate import (
 import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
 import svi.auto_thermal_reformer.config as config
 
-DEFAULT_SURROGATE_FNAME = "keras_surrogate"
+DEFAULT_SURROGATE_FNAME = "keras_surrogate_low_rel"
 
 
 def _get_nn_surrogate_fname():
