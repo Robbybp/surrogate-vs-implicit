@@ -67,8 +67,15 @@ def plot_convergence_reliability(fname, validation_df=None, feastol=None):
     data = pd.read_csv(fname)
 
     condition = data["Termination"] == "optimal"
+
+    # I would rather not modify data in-place here
     data.loc[condition, "Termination"] = 1
     data.loc[~condition, "Termination"] = 0
+
+    # To determine whether to plot as a "success", I want to check:
+    # - sweep["Termination"]
+    # - validation["Feasible"]
+    # - optinally, validation["Infeasibility"]
 
     data = data.drop("Unnamed: 0", axis=1)
     data["Termination"] = data["Termination"].astype(float)
