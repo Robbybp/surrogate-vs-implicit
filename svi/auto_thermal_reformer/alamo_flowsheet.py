@@ -57,8 +57,119 @@ from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_
 from idaes.core.surrogate.alamopy import AlamoSurrogate
 from idaes.core.surrogate.surrogate_block import SurrogateBlock
 
-def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
-   ########## ADD THERMODYNAMIC PROPERTIES ##########  
+import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
+import svi.auto_thermal_reformer.config as config
+
+
+DEFAULT_SURROGATE_FNAME = "alamo_surrogate_atr.json"
+
+
+def _get_alamo_surrogate_fname():
+    # TODO: Accept arguments so we can override the default results dir.
+    # Note that this function is essentially hard-coding the default
+    # surrogate file.
+    default_results_dir = config.get_results_dir()
+    return os.path.join(default_results_dir, DEFAULT_SURROGATE_FNAME)
+
+
+def create_instance(
+    conversion,
+    pressure,
+    initialize=True,
+    surrogate_fname=None,
+):
+    if surrogate_fname is None:
+        surrogate_fname = _get_alamo_surrogate_fname()
+
+    # Create a simulation model so we can explicitly ensure we have zero degrees
+    # of freedom after replacing the reformer with the ALAMO surrogate.
+    # Note that this fixes conversion to 0.95. We will have to set this later.
+    m = fullspace.make_simulation_model(pressure, initialize=True)
+
+    # Deactivate constraints in reformer and pre-reformer-mixer
+    # Note that we will re-use variables in these blocks as part of the
+    # surrogate model.
+    for con in m.fs.reformer.component_objects(pyo.Constraint):
+        con.deactivate()
+    for con in m.fs.reformer_mix.component_objects(pyo.Constraint):
+        con.deactivate()
+    # Deactivate the arc between mixer and reformer
+    m.fs.REF_IN_expanded.deactivate()
+
+    # To account for the deactivated reformer_mix, we create a new steam feed
+    #m.fs.steam_feed = Feed(property_package = m.fs.thermo_params)
+
+    ########## DEFINE SURROGATE BLOCK FOR THE ATR ##########
+    m.fs.reformer_surrogate = SurrogateBlock()
+
+    # Fix conversion to specified value
+    m.fs.reformer.conversion.fix(conversion)
+    # Create a reference to conversion on the surrogate block
+    m.fs.reformer_surrogate.conversion = pyo.Reference(m.fs.reformer.conversion)
+
+    ########## CREATE OUTLET VARS FOR ATR SURROGATE ##########
+    m.fs.reformer_surrogate.heat_duty = pyo.Reference(m.fs.reformer.heat_duty)
+    m.fs.reformer_surrogate.out_flow_mol = pyo.Reference(m.fs.reformer.outlet.flow_mol)
+    m.fs.reformer_surrogate.out_temp = pyo.Reference(m.fs.reformer.outlet.temperature)
+    m.fs.reformer_surrogate.out_mole_frac_comp = pyo.Reference(m.fs.reformer.outlet.mole_frac_comp)
+
+    # define the inputs to the surrogate models
+    inputs = [
+        m.fs.reformer_bypass.reformer_outlet.flow_mol[0], 
+        m.fs.reformer_bypass.reformer_outlet.temperature[0], 
+        m.fs.reformer_mix.steam_inlet.flow_mol,
+        # This is now fixed?
+        # m.fs.intercooler_s2.outlet.flow_mol[0],
+        m.fs.reformer_surrogate.conversion,
+    ]
+
+    # define the outputs of the surrogate models
+    outputs = [
+        m.fs.reformer_surrogate.heat_duty[0],
+        m.fs.reformer_surrogate.out_flow_mol[0],
+        m.fs.reformer_surrogate.out_temp[0],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "H2"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "CO"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "H2O"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "CO2"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "CH4"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "C2H6"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "C3H8"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "C4H10"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "N2"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "O2"],
+        m.fs.reformer_surrogate.out_mole_frac_comp[0, "Ar"],
+    ]
+
+    # build the surrogate for the Gibbs Reactor using the JSON file obtained before
+    surrogate = AlamoSurrogate.load_from_file(surrogate_fname)
+
+    # The reformer surrogate contains 14 eq. constraints and 15 vars (one fixed)
+    m.fs.reformer_surrogate.build_model(
+        surrogate, input_vars=inputs, output_vars=outputs
+    )
+
+    # TODO: Toggle whether we apply enforce the surrogate training bounds
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setlb(0.0)
+    m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setub(50000.0)
+    m.fs.reformer_surrogate.conversion.setlb(0.0)
+    m.fs.reformer_surrogate.conversion.setub(1.0)
+
+    # At this point we have a square (simulation) model. Now we must
+    # unfix degrees of freedom, add an objective function, and add specification
+    # constraints.
+    fullspace.add_obj_and_constraints(m)
+
+    return m
+
+
+def build_alamo_atr_flowsheet(m, alamo_surrogate_dict, conversion):
+    # TODO: This flowsheet should re-use the fullspace flowsheet.
+    # - construct full-space flowsheet (including Gibbs reactor and mixer)
+    # - deactivate reactor, mixer, and arcs linking them to rest of flowsheet
+    # - Construct block based on surrogate model
+
+    ########## ADD THERMODYNAMIC PROPERTIES ##########  
     components = ['H2', 'CO', "H2O", 'CO2', 'CH4', "C2H6", "C3H8", "C4H10",'N2', 'O2', 'Ar']
     thermo_props_config_dict = get_prop(components = components)
     m.fs.thermo_params = GenericParameterBlock(**thermo_props_config_dict)
@@ -107,8 +218,8 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
 
     ########## DEFINE SURROGATE BLOCK FOR THE ATR ##########
 
-    m.fs.reformer = SurrogateBlock() 
-    m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless) 
+    m.fs.reformer = SurrogateBlock()
+    m.fs.reformer.conversion = Var(bounds=(0, 1), units=pyunits.dimensionless)
     m.fs.reformer.conversion.fix(conversion) # ACHIEVE A CONVERSION OF 0.95 IN ATR
 
     ########## CREATE OUTLET VARS FOR ATR SURROGATE ##########
@@ -129,11 +240,13 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
     m.fs.reformer.out_Ar = Var(initialize = 0.003892586)
 
     # define the inputs to the surrogate models
-    inputs = [m.fs.reformer_bypass.reformer_outlet.flow_mol[0], 
-                m.fs.reformer_bypass.reformer_outlet.temperature[0], 
-                m.fs.steam_feed.flow_mol[0],
-                # m.fs.intercooler_s2.outlet.flow_mol[0],
-                m.fs.reformer.conversion]
+    inputs = [
+        m.fs.reformer_bypass.reformer_outlet.flow_mol[0], 
+        m.fs.reformer_bypass.reformer_outlet.temperature[0], 
+        m.fs.steam_feed.flow_mol[0],
+        # m.fs.intercooler_s2.outlet.flow_mol[0],
+        m.fs.reformer.conversion,
+    ]
 
     # define the outputs of the surrogate models
     outputs = [m.fs.reformer.heat_duty, m.fs.reformer.out_flow_mol, m.fs.reformer.out_temp, m.fs.reformer.out_H2,
@@ -143,10 +256,13 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
     # build the surrogate for the Gibbs Reactor using the JSON file obtained before
     surrogate = AlamoSurrogate.load_from_file(alamo_surrogate_dict)
     m.fs.reformer.build_model(surrogate, input_vars=inputs, output_vars=outputs)
+
+    # TODO: Toggle whether we apply enforce the surrogate training bounds
     m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setlb(0.0)
     m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setub(50000.0)
     m.fs.reformer.conversion.setlb(0.0)
     m.fs.reformer.conversion.setub(1.0)
+
     m.fs.bypass_rejoin = Mixer(
         inlet_list = ["syngas_inlet", "bypass_inlet"],
         property_package = m.fs.thermo_params)
@@ -164,7 +280,6 @@ def build_alamo_atr_flowsheet(m,alamo_surrogate_dict, conversion):
     ########## CONNECT OUTPUTS OF SURROGATE TO RECUPERATOR SHELL INLET ##########  
 
     m.fs.reformer_recuperator.shell_inlet.pressure[0].fix(137895)
-
     m.fs.reformer_recuperator.shell_inlet.flow_mol[0].set_value(value(m.fs.reformer.out_flow_mol))
     m.fs.reformer_recuperator.shell_inlet.temperature[0].set_value(value(m.fs.reformer.out_temp))
     m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'].set_value(value(m.fs.reformer.out_H2))
@@ -194,7 +309,7 @@ def set_alamo_atr_flowsheet_inputs(m,P):
 
     m.fs.feed.outlet.flow_mol.fix(1161.9)  # mol/s
     m.fs.feed.outlet.temperature.fix(288.15)  # K
-    m.fs.feed.outlet.pressure.fix(P) # Pa
+    m.fs.feed.outlet.pressure.fix(P*pyo.units.Pa) # Pa
     m.fs.feed.outlet.mole_frac_comp[0, 'CH4'].fix(0.931)
     m.fs.feed.outlet.mole_frac_comp[0, 'C2H6'].fix(0.032)
     m.fs.feed.outlet.mole_frac_comp[0, 'C3H8'].fix(0.007)
@@ -264,7 +379,8 @@ def set_alamo_atr_flowsheet_inputs(m,P):
     m.fs.steam_feed.mole_frac_comp[0, 'C4H10'].fix(1e-6)
     m.fs.steam_feed.mole_frac_comp[0, 'CO'].fix(1e-6)
     m.fs.steam_feed.mole_frac_comp[0, 'H2'].fix(1e-6)
-    
+
+
 def initialize_alamo_atr_flowsheet(m):
     ########## INITIALIZE AND PROPAGATE STATES ##########
     m.fs.reformer_recuperator.initialize()
@@ -280,20 +396,22 @@ def initialize_alamo_atr_flowsheet(m):
     m.fs.reformer_bypass.inlet.temperature.fix(700)  # K
     m.fs.reformer_bypass.initialize()
 
-def make_simulation_model(X, P):
+
+def make_simulation_model(X, P, surrogate_fname=None):
+    if surrogate_fname is None:
+        surrogate_fname = _get_alamo_surrogate_fname()
     m = pyo.ConcreteModel(name="ATR_Flowsheet")
     m.fs = FlowsheetBlock(dynamic=False)
-    dirname = os.path.dirname(__file__)
-    basename = "alamo_surrogate_atr.json"
-    fname = os.path.join(dirname, basename)
-    build_alamo_atr_flowsheet(m, alamo_surrogate_dict = fname, conversion = X)
+    build_alamo_atr_flowsheet(m, alamo_surrogate_fname, conversion = X)
     set_alamo_atr_flowsheet_inputs(m, P)
     initialize_alamo_atr_flowsheet(m)
     m.fs.reformer_bypass.inlet.temperature.unfix()
     m.fs.reformer_bypass.inlet.flow_mol.unfix()
     return m
 
+
 df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
+
 
 if __name__ == "__main__":
     """
@@ -302,96 +420,16 @@ if __name__ == "__main__":
     its maximum N2 concentration is 0.3, the maximum reformer outlet temperature is 1200 K and 
     the maximum product temperature is 650 K.  
     """
-    for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
-        for P in np.arange(1447379,1947379,70000):
+    #for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
+    for X in [0.95,0.96,0.97]:
+        #for P in np.arange(1447379, 1947379, 70000):
+        for P in [1450000, 1650000, 1850000]:
             try: 
-                m = make_simulation_model(X,P)
-
-                ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
-                m.fs.obj = pyo.Objective(expr = m.fs.product.mole_frac_comp[0, 'H2'], sense = pyo.maximize)
-
-                ####### CONSTRAINTS #######
-
-                # Link outputs of ALAMO to inputs of reformer_recuperator 
-                @m.Constraint()
-                def link_T(m):
-                    return m.fs.reformer_recuperator.shell_inlet.flow_mol[0] == m.fs.reformer.out_flow_mol
-
-                @m.Constraint()
-                def link_F(m):
-                    return m.fs.reformer_recuperator.shell_inlet.temperature[0] == m.fs.reformer.out_temp
-
-                @m.Constraint()
-                def link_H2(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'] == m.fs.reformer.out_H2
-
-                @m.Constraint()
-                def link_CO(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'] == m.fs.reformer.out_CO
-
-                @m.Constraint()
-                def link_H2O(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'] == m.fs.reformer.out_H2O
-
-                @m.Constraint()
-                def link_CO2(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'] == m.fs.reformer.out_CO2
-
-                @m.Constraint()
-                def link_CH4(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'] == m.fs.reformer.out_CH4
-
-                @m.Constraint()
-                def link_C2H6(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] == m.fs.reformer.out_C2H6
-
-                @m.Constraint()
-                def link_C3H8(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] == m.fs.reformer.out_C3H8
-
-                @m.Constraint()
-                def link_C4H10(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] == m.fs.reformer.out_C4H10
-
-                @m.Constraint()
-                def link_N2(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'] == m.fs.reformer.out_N2
-
-                @m.Constraint()
-                def link_O2(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'] == m.fs.reformer.out_O2
-
-                @m.Constraint()
-                def link_Ar(m):
-                    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer.out_Ar
-
-                # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
-                @m.Constraint()
-                def min_product_flow_mol(m):
-                    return m.fs.product.flow_mol[0] >= 3500
-
-                # MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
-                @m.Constraint()
-                def max_product_N2_comp(m):
-                    return m.fs.product.mole_frac_comp[0, 'N2'] <= 0.3
-
-                # MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
-                @m.Constraint()
-                def max_reformer_outlet_temp(m):
-                    return m.fs.reformer.out_temp <= 1200
-
-                # MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
-                @m.Constraint()
-                def max_product_temp(m):
-                    return m.fs.product.temperature[0] <= 650
-
-                m.fs.feed.outlet.flow_mol[0].setlb(1120)
-                m.fs.feed.outlet.flow_mol[0].setub(1250)
-                # Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
-                # to the Gibbs reactor will have to be determined by the optimization problem.
-                m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
-                m.fs.feed.outlet.flow_mol.unfix()
-                m.fs.steam_feed.flow_mol.unfix() 
+                m = create_instance(X, P)
+                # Does this need to be applied after creating the surrogate? Why?
+                initialize_alamo_atr_flowsheet(m)
+                m.fs.reformer_bypass.inlet.temperature.unfix()
+                m.fs.reformer_bypass.inlet.flow_mol.unfix()
 
                 solver = get_solver()
                 solver.options = {
@@ -407,7 +445,8 @@ if __name__ == "__main__":
                 df[list(df.keys())[2]].append(results.solver.termination_condition)
                 df[list(df.keys())[3]].append(dT)
                 df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0, 'H2']))
-                df[list(df.keys())[5]].append(value(m.fs.steam_feed.flow_mol[0]))
+                df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+                #df[list(df.keys())[5]].append(value(m.fs.steam_feed.flow_mol[0]))
                 df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
                 df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
             except ValueError:
@@ -420,7 +459,6 @@ if __name__ == "__main__":
                 df[list(df.keys())[6]].append(999)
                 df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
                 continue
-    
-    df = pd.DataFrame(df)
-    df.to_csv("alamo_experiment.csv")
 
+    df = pd.DataFrame(df)
+    df.to_csv("sweep_results_alamo.csv")

@@ -156,8 +156,10 @@ def make_implicit(m):
 
 
 def main():
-    from svi.auto_thermal_reformer.fullspace_atr_fsheet import make_optimization_model
-    m = make_optimization_model()
+    from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
+    P = 160000.0
+    X = 0.95
+    m = make_optimization_model(X, P, initialize=False)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
 
@@ -170,7 +172,6 @@ def main():
     vblocks, cblocks = igraph.block_triangularize(external_vars, external_cons)
     var_order = sum(vblocks, [])
     con_order = sum(cblocks, [])
-    imat = get_structural_incidence_matrix(var_order, con_order)
 
     for i, (vb, cb) in enumerate(zip(vblocks, cblocks)):
         print(f"Block {i}")
@@ -182,18 +183,20 @@ def main():
         for con in cb:
             print(f"  {con.name}")
 
+    from pyomo.contrib.incidence_analysis.visualize import spy_dulmage_mendelsohn
+    from pyomo.contrib.incidence_analysis.config import IncidenceOrder
+    from pyomo.util.subsystems import create_subsystem_block, TemporarySubsystemManager
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.spy(imat, markersize=3)
+    bl = create_subsystem_block(external_cons, external_vars)
+    with TemporarySubsystemManager(to_fix=list(bl.input_vars[:])):
+        fig, ax = spy_dulmage_mendelsohn(
+            bl,
+            order=IncidenceOrder.dulmage_mendelsohn_lower,
+            highlight_coarse=False,
+            spy_kwds=dict(markersize=3),
+        )
     plt.show()
 
-    #solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 300})
-    #solver.solve(m_implicit, tee=True)
-
-    #m.fs.reformer.report()
-    #m.fs.reformer_recuperator.report()
-    #m.fs.product.report()
-    #m.fs.reformer_bypass.split_fraction.display()
 
 if __name__ == "__main__":
     main()
