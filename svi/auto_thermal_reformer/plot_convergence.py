@@ -77,13 +77,32 @@ def plot_convergence_reliability(fname, validation_df=None, feastol=None):
     # - validation["Feasible"]
     # - optinally, validation["Infeasibility"]
 
+    solver_optimal = (data["Termination"] == "optimal").astype(float)
+    if validation_df is not None:
+        if feastol is None:
+            model_feasible = (validation_df["Feasible"] == 1).astype(float)
+        else:
+            model_feasible = (
+                (validation_df["Feasible"] == 1)
+                | (validation_df["Infeasibility"] <= feastol)
+            )
+    else:
+        # If we don't have validation data, just assume that optimal => feasible
+        model_feasible = np.ones(len(data))
+
+    success = (solver_optimal & model_feasible) # potentially: & obj_within_margin)
+
     data = data.drop("Unnamed: 0", axis=1)
     data["Termination"] = data["Termination"].astype(float)
 
     data["P"] = data["P"] / 1e6
     data["P"] = data["P"].round(2)
 
+    # Extract columns that we need for plotting.
+    # TODO: Get a "Success" column from another DF instead of
+    # using "Termination"
     df_for_plotting = data[["X", "P", "Termination"]]
+
     pivoting = np.round(
         pd.pivot_table(
             df_for_plotting,
@@ -94,6 +113,8 @@ def plot_convergence_reliability(fname, validation_df=None, feastol=None):
         ),
         2,
     )
+
+    import pdb; pdb.set_trace()
 
     fig = plt.figure(figsize=(7, 7))
     ax = sns.heatmap(
