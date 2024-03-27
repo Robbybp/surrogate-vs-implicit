@@ -186,8 +186,8 @@ def main():
     )
     argparser.add_argument(
         "--feastol",
-        default=1e-5,
-        help="Tolerance used to check feasibility of parameters (default 1e-5)",
+        default=1e-8,
+        help="Tolerance used to check feasibility of parameters (default 1e-8)",
     )
     args = argparser.parse_args()
 
