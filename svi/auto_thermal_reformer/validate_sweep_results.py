@@ -94,8 +94,13 @@ def validate_results(df, feastol=0.0):
         valid, violations = validate_model_simulation(m, feastol=feastol)
         con_violations, bound_violations = violations
         default = (None, None, 0.0)
-        con_infeas = abs(max(con_violations, key=lambda item: abs(item[2]), default=default)[2])
-        bound_infeas = abs(max(bound_violations, key=lambda item: abs(item[2]), default=default)[2])
+
+        con_infeas = abs(
+            max(con_violations, key=lambda item: abs(item[2]), default=default)[2]
+        )
+        bound_infeas = abs(
+            max(bound_violations, key=lambda item: abs(item[2]), default=default)[2]
+        )
         infeas = max(con_infeas, bound_infeas)
         df_val_res['X'].append(X)
         df_val_res['P'].append(P)
@@ -181,8 +186,8 @@ def main():
     )
     argparser.add_argument(
         "--feastol",
-        default=1e-6,
-        help="Tolerance used to check feasibility of parameters",
+        default=1e-5,
+        help="Tolerance used to check feasibility of parameters (default 1e-5)",
     )
     args = argparser.parse_args()
 
