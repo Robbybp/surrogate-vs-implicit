@@ -54,7 +54,7 @@ def main():
     args = argparser.parse_args()
 
     surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
-    output_fpath = os.path.join(args.data_dir, args.fname, args.surrogate_fname)
+    output_fpath = os.path.join(args.data_dir, args.fname)
 
     df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
 
@@ -66,7 +66,7 @@ def main():
     """
 
     xp_samples = config.get_parameter_samples(args)
-
+    
     for X, P in xp_samples:
         try: 
             m = create_instance(X, P, surrogate_fname=surrogate_fname)
