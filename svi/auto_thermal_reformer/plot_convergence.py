@@ -46,6 +46,7 @@ argparser.add_argument(
 argparser.add_argument(
     "--feastol",
     default=None,
+    type=float,
     help="Optional parameter to override 'Feasible' column with a relaxed tolerance",
 )
 argparser.add_argument("--show", action="store_true", help="Flag to show the plot")
