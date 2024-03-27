@@ -21,22 +21,8 @@
 
 ######## IMPORT PACKAGES ########
 import os
-import pyomo.environ as pyo
 import pandas as pd
 import numpy as np
-from pyomo.environ import (
-    Constraint,
-    Var,
-    ConcreteModel,
-    Expression,
-    Objective,
-    TransformationFactory,
-    value,
-    units as pyunits,
-)
-
-from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
-from svi.auto_thermal_reformer.fullspace_flowsheet import make_simulation_model
 from svi.auto_thermal_reformer.config import get_argparser
 
 import matplotlib.pyplot as plt
@@ -69,13 +55,11 @@ argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude
 
 
 def plot_convergence_reliability(
-    fname,
+    data,
     validation_df=None,
     feastol=None,
     legend=True,
 ):
-    data = pd.read_csv(fname)
-
     # To determine whether to plot as a "success", I want to check:
     # - sweep["Termination"]
     # - validation["Feasible"]
@@ -177,13 +161,14 @@ def plot_convergence_reliability(
 if __name__ == "__main__":
     args = argparser.parse_args()
 
+    experiment_df = pd.read_csv(args.experiment_fpath)
     if args.validation_fpath is not None:
         validation_df = pd.read_csv(args.validation_fpath)
     else:
         validation_df = None
 
     fig, ax = plot_convergence_reliability(
-        fname=args.experiment_fpath,
+        experiment_df,
         validation_df=validation_df,
         feastol=args.feastol,
         legend=not args.no_legend,
