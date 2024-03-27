@@ -61,24 +61,6 @@ def main():
 
     xp_samples = config.get_parameter_samples(args)
 
-    #x_lo = 0.90
-    #x_hi = 0.97
-    #p_lo = 1447379.0
-    #p_hi = 1947379.0
-    #
-    #n_x = args.n1
-    #n_p = args.n2
-    #dx = (x_hi - x_lo) / (n_x - 1)
-    #dp = (p_hi - p_lo) / (n_p - 1)
-    #x_list = [x_lo + i * dx for i in range(n_x)]
-    #p_list = [p_lo + i * dp for i in range(n_p)]
-
-    #xp_samples = list(itertools.product(x_list, p_list))
-
-    #for X in [0.90,0.91,0.92,0.93,0.94,0.95,0.96,0.97]:
-    #for X in [0.95,0.96,0.97]:
-    #    #for P in np.arange(1447379, 1947379, 70000):
-    #    for P in [1450000, 1650000, 1850000]:
     for X, P in xp_samples:
         try: 
             m = create_instance(X, P, surrogate_fname=surrogate_fname)
@@ -86,94 +68,6 @@ def main():
             initialize_alamo_atr_flowsheet(m)
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
-
-            #m = make_simulation_model(X,P)
-
-            ######## OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
-            #m.fs.obj = pyo.Objective(expr = m.fs.product.mole_frac_comp[0, 'H2'], sense = pyo.maximize)
-
-            ######## CONSTRAINTS #######
-
-            ## Link outputs of ALAMO to inputs of reformer_recuperator 
-            #@m.Constraint()
-            #def link_T(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.flow_mol[0] == m.fs.reformer.out_flow_mol
-
-            #@m.Constraint()
-            #def link_F(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.temperature[0] == m.fs.reformer.out_temp
-
-            #@m.Constraint()
-            #def link_H2(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2'] == m.fs.reformer.out_H2
-
-            #@m.Constraint()
-            #def link_CO(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO'] == m.fs.reformer.out_CO
-
-            #@m.Constraint()
-            #def link_H2O(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'H2O'] == m.fs.reformer.out_H2O
-
-            #@m.Constraint()
-            #def link_CO2(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CO2'] == m.fs.reformer.out_CO2
-
-            #@m.Constraint()
-            #def link_CH4(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'CH4'] == m.fs.reformer.out_CH4
-
-            #@m.Constraint()
-            #def link_C2H6(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C2H6'] == m.fs.reformer.out_C2H6
-
-            #@m.Constraint()
-            #def link_C3H8(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C3H8'] == m.fs.reformer.out_C3H8
-
-            #@m.Constraint()
-            #def link_C4H10(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'C4H10'] == m.fs.reformer.out_C4H10
-
-            #@m.Constraint()
-            #def link_N2(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'N2'] == m.fs.reformer.out_N2
-
-            #@m.Constraint()
-            #def link_O2(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'O2'] == m.fs.reformer.out_O2
-
-            #@m.Constraint()
-            #def link_Ar(m):
-            #    return m.fs.reformer_recuperator.shell_inlet.mole_frac_comp[0, 'Ar'] == m.fs.reformer.out_Ar
-
-            ## MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
-            #@m.Constraint()
-            #def min_product_flow_mol(m):
-            #    return m.fs.product.flow_mol[0] >= 3500
-
-            ## MAXIMUM N2 COMPOSITION OF 0.3 IN PRODUCT STREAM
-            #@m.Constraint()
-            #def max_product_N2_comp(m):
-            #    return m.fs.product.mole_frac_comp[0, 'N2'] <= 0.3
-
-            ## MAXIMUM REFORMER OUTLET TEMPERATURE OF 1200 K
-            #@m.Constraint()
-            #def max_reformer_outlet_temp(m):
-            #    return m.fs.reformer.out_temp <= 1200
-
-            ## MAXIMUM PRODUCT OUTLET TEMPERATURE OF 650 K
-            #@m.Constraint()
-            #def max_product_temp(m):
-            #    return m.fs.product.temperature[0] <= 650
-
-            #m.fs.feed.outlet.flow_mol[0].setlb(1120)
-            #m.fs.feed.outlet.flow_mol[0].setub(1250)
-            ## Unfix D.O.F. If you unfix these variables, inlet temperature, flow and composition
-            ## to the Gibbs reactor will have to be determined by the optimization problem.
-            #m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].unfix()
-            #m.fs.feed.outlet.flow_mol.unfix()
-            #m.fs.steam_feed.flow_mol.unfix() 
 
             solver = get_solver()
             solver.options = {
