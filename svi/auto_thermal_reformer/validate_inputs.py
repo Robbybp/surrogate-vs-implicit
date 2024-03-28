@@ -38,7 +38,12 @@ def simulate_model(m, tee=True):
     # Use scipy.fsolve (Powell trust region) as it seems a little more
     # reliable than Ipopt, and is not slower for small systems, despite
     # SciPy's implementation not exploiting sparsity.
+    #
+    # We solve simulation problems for validation to a tighter tolerance to try
+    # and minimize the variance in our analysis due to this part of the process
     solver = pyo.SolverFactory("scipy.fsolve")
+    solver.options["xtol"] = 1e-12
+    #solver.options["tol"] = 1e-10
     solve_strongly_connected_components(
         m,
         solver=solver,
@@ -46,16 +51,25 @@ def simulate_model(m, tee=True):
         # Hard-code tee=False for sub-solvers
         solve_kwds=dict(tee=False),
     )
-    res = pyo.SolverFactory("ipopt").solve(m, tee=tee)
+    postsolver = pyo.SolverFactory("ipopt")
+    # Can't figure out how to set options...
+    #postsolver = pyo.SolverFactory("ipopt_v2")
+    postsolver.options["tol"] = 1e-9
+    postsolver.options["print_user_options"] = "yes"
+    res = postsolver.solve(m, tee=True)
     return res
 
 
 def validate_model_simulation(m, feastol=0.0):
     try:
         simulate_model(m)
-    except (ValueError, RuntimeError):
+    except (ValueError, RuntimeError) as err:
         # We sometimes get ValueErrors when Ipopt throws an error, even when the
-        # solve is acceptable.
+        # solve is acceptable. In this case, the solution doesn't get loaded into
+        # the model, so it is arguable whether we should continue...
+        print("WARNING: Got an error:")
+        print(err)
+        print("WARNING: Continuing with validation despite error")
         pass
     valid, violations = validate_solution(m, tolerance=feastol)
     return valid, violations
