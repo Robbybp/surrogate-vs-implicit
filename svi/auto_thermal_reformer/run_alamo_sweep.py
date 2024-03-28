@@ -50,7 +50,7 @@ def main():
     surrogate_fname = os.path.join(args.data_dir, DEFAULT_SURROGATE_FNAME)
     output_fpath = os.path.join(args.data_dir, args.fname)
 
-    df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
+    df = {key: [] for key in config.PARAM_SWEEP_KEYS}
 
     """
     The optimization problem to solve is the following:
@@ -61,7 +61,8 @@ def main():
 
     xp_samples = config.get_parameter_samples(args)
 
-    for X, P in xp_samples:
+    for i, (X, P) in enumerate(xp_samples):
+        print(f"Running sample {i} with X={X}, P={P}")
         try: 
             m = create_instance(X, P, surrogate_fname=surrogate_fname)
             # Does this need to be applied after creating the surrogate? Why?
@@ -69,13 +70,10 @@ def main():
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
 
-            solver = get_solver()
-            solver.options = {
-                "tol": 1e-7,
-                "max_iter": 300
-            }
+            solver = config.get_optimization_solver()
             timer = TicTocTimer()
             timer.tic('starting timer')
+            print(f"Solving sample {i} with X={X}, P={P}")
             results = solver.solve(m, tee=True)
             dT = timer.toc('end')
             df[list(df.keys())[0]].append(X)
@@ -99,7 +97,9 @@ def main():
             continue
 
     df = pd.DataFrame(df)
-    df.to_csv(output_fpath)
+    print(df)
+    if not args.no_save:
+        df.to_csv(output_fpath)
 
 
 if __name__ == "__main__":
