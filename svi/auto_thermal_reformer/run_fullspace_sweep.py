@@ -32,25 +32,37 @@ import pandas as pd
 import numpy as np
 
 
-df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
+df = {key: [] for key in config.PARAM_SWEEP_KEYS}
+
+
+INVALID = None
 
 
 def main(X,P):
     m = make_optimization_model(X,P)
-    solver = pyo.SolverFactory('ipopt')
-    solver.options = {"tol": 1e-7, "max_iter": 300}
+
+    # For instance 13 in the param sweep, these options give a quite interesting local
+    # solution.
+    solver = config.get_optimization_solver()
     timer = TicTocTimer()
     timer.tic("starting timer")
+    print(f"Solving sample {i} with X={X}, P={P}")
     results = solver.solve(m, tee=True)
     dT = timer.toc("end timer")
     df[list(df.keys())[0]].append(X)
     df[list(df.keys())[1]].append(P)
     df[list(df.keys())[2]].append(results.solver.termination_condition)
-    df[list(df.keys())[3]].append(dT)
-    df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
-    df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-    df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
-    df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+    if pyo.check_optimal_termination(results.solver.termination_condition):
+        df[list(df.keys())[3]].append(dT)
+        df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
+        df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+        df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+        df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+    else:
+        # If the solver didn't converge, we don't care about the solve time,
+        # the objective, or any of the degree of freedom values.
+        for i in range(3, 8):
+            df[config.PARAM_SWEEP_KEYS[i]].append(INVALID)
 
 
 if __name__ == "__main__":
@@ -65,40 +77,42 @@ if __name__ == "__main__":
 
     fpath = os.path.join(args.data_dir, args.fname)
 
-    #for X in np.arange(0.90,0.98,0.01):
-    #for X in [0.95, 0.96, 0.97]:
-    #    #for P in np.arange(1447379,1947379,70000):
-    #    for P in [1450000, 1650000, 1850000]:
-    for X, P in xp_samples:
+    for i, (X, P) in enumerate(xp_samples):
+        print(f"Running sample {i} with X={X}, P={P}")
         try:
             main(X,P)
         except AssertionError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
-             df[list(df.keys())[2]].append("AMPL Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[2]].append(INVALID)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
         except OverflowError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
              df[list(df.keys())[2]].append("Overflow Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
         except RuntimeError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
              df[list(df.keys())[2]].append("Runtime Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
    
     df = pd.DataFrame(df)
-    df.to_csv(fpath)
+    print(df)
+    if args.no_save:
+        print(f"--no-save set. Not saving results")
+    else:
+        print(f"Writing sweep results to {fpath}")
+        df.to_csv(fpath)
