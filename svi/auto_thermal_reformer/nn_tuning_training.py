@@ -25,17 +25,10 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
-import matplotlib.pyplot as plt
 from idaes.core.surrogate.sampling.data_utils import split_training_validation
 from idaes.core.surrogate.sampling.scaling import OffsetScaler
-from idaes.core.surrogate.keras_surrogate import (
-    KerasSurrogate,
-    save_keras_json_hd5,
-    load_keras_json_hd5,
-)
-
-from idaes.core.surrogate.alamopy import AlamoSurrogate
 from idaes.core.surrogate.keras_surrogate import KerasSurrogate
+from idaes.core.surrogate.alamopy import AlamoSurrogate
 from sklearn.metrics import r2_score
 
 np.random.seed(46)
@@ -43,14 +36,17 @@ random.seed(1342)
 tf.random.set_seed(62)
 tf.keras.backend.set_floatx('float64')
 
-# This function is to tune and train the neural network
-
 def create_nn_and_compare(fname = "data_atr.csv", 
-                          tune = False, 
+                          tune = False,
+                          save_val = False,
                           alamo_surr = 'alamo_surrogate_atr.json', 
                           compare_r2 = True):
 
-    csv_data = pd.read_csv(fname) 
+    dirname = os.path.dirname(__file__)
+    data_dir = os.path.join(dirname, "data")
+    fname_path = os.path.join(data_dir, fname)
+    csv_data = pd.read_csv(fname_path) 
+
     if 'Unnamed: 0' in csv_data.columns:
         csv_data = csv_data.drop('Unnamed: 0', axis=1)
 
@@ -71,14 +67,16 @@ def create_nn_and_compare(fname = "data_atr.csv",
     ) 
 
     # Save the data_validation file
-    #data_validation.to_csv("data_validation.csv")
+    data_val_path = os.path.join(data_dir, "data_validation.csv")
+    if save_val == True:
+        data_validation.to_csv(data_val_path)
 
     # Define the parameter values to try
-    activations = ["tanh"] #["sigmoid", "tanh"]
+    activations = ["sigmoid", "tanh"]
     optimizers = ["Adam"]
     n_hidden_layers_values = np.arange(2,5,1).tolist()
     n_nodes_per_layer_values = np.arange(20,31,1).tolist()
-    epochs = 500 
+    epochs = 400 
 
     loss, metrics = "mse", ["mae", "mse"]
     
@@ -135,13 +133,15 @@ def create_nn_and_compare(fname = "data_atr.csv",
                                 input_scaler=input_scaler,
                                 output_scaler=output_scaler,
                             )
-        
-                            keras_surrogate.save_to_folder("keras_surrogate")
+                            
+                            nn_path = os.path.join(data_dir, "keras_surrogate_high_rel")
+                            keras_surrogate.save_to_folder(nn_path)
     
     if compare_r2 == True:
         
         # Load the NN
-        model = keras.models.load_model('keras_surrogate_high_rel')
+        nn_path = os.path.join(data_dir, "keras_surrogate_high_rel")
+        model = keras.models.load_model(nn_path)
 
         keras_surrogate = KerasSurrogate(
             model,
@@ -153,15 +153,18 @@ def create_nn_and_compare(fname = "data_atr.csv",
         )
 
         # Load the ALAMO surrogate
-        alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr)
-        data_validation = pd.read_csv("Users/sbugosen/Downloads/data_validation.csv") 
+        alamo_surr_path = os.path.join(data_dir, alamo_surr)
+        alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr_path)
+        
+        data_validation = pd.read_csv(data_val_path) 
+
         if 'Unnamed: 0' in data_validation.columns:
             data_validation = data_validation.drop('Unnamed: 0', axis=1)
 
         # Predict output data with NN and ALAMO
         predicted_output_data_nn = KerasSurrogate.evaluate_surrogate(keras_surrogate, data_validation.iloc[:,:4])
         predicted_output_data_alamo = AlamoSurrogate.evaluate_surrogate(alamo_surrogate, data_validation.iloc[:,:4])
-        predicted_output_data_nn.to_csv("predicted_output_data_nn.csv")
+        
         # Calculate R2 for NN and ALAMO parity plots
         r2_nn = list()
         r2_alamo = list()
@@ -176,11 +179,13 @@ def create_nn_and_compare(fname = "data_atr.csv",
                 r2_alamo.append(r2_score(y_true_alamo,y_pred_alamo))
         
         r2_df = pd.DataFrame({'Component': output_labels, 'R2-ALAMO': r2_alamo, 'R2-NN': r2_nn})
-        r2_df.to_csv('R2_values.csv')
+        r2_path = os.path.join(data_dir, "R2_values.csv")
+        r2_df.to_csv(r2_path)
 
 if __name__ == "__main__":
     create_nn_and_compare(fname = "data_atr.csv", 
                           tune = False, 
+                          save_val = True,
                           alamo_surr = 'alamo_surrogate_atr.json', 
                           compare_r2 = True)
 
