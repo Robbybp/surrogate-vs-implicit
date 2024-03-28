@@ -49,7 +49,7 @@ import seaborn as sns
 import argparse
 
 
-NON_OPTIMAL = None
+INVALID = None
 
 
 """Script for validating the results of a parameter sweep by simulating
@@ -116,16 +116,13 @@ def validate_results(df, feastol=0.0):
             print("Optimization did not converge successfully. Skipping validation.")
             df_val_res['X'].append(X)
             df_val_res['P'].append(P)
-            df_val_res['Infeasibility'].append(NON_OPTIMAL)
-            df_val_res['Feasible'].append(NON_OPTIMAL)
-            df_val_res['Objective'].append(NON_OPTIMAL)
+            df_val_res['Infeasibility'].append(INVALID)
+            df_val_res['Feasible'].append(INVALID)
+            df_val_res['Objective'].append(INVALID)
 
     df_val_res = pd.DataFrame(df_val_res)
 
     return df_val_res
-
-
-INVALID = 999
 
 
 def calculate_objective_errors(input_df, baseline_df, output_df=None):
@@ -147,7 +144,7 @@ def calculate_objective_errors(input_df, baseline_df, output_df=None):
         if row['Termination'] == "optimal":
             list_of_optimal_results.append(index)
     for index, row in df_val_res.iterrows():
-        if row['Objective'] == INVALID or row['Objective'] == NON_OPTIMAL:
+        if row['Objective'] == INVALID:
             list_of_invalid_indices.append(index)
     
     baseline_df = baseline_df.drop(list_of_invalid_indices)
@@ -156,7 +153,7 @@ def calculate_objective_errors(input_df, baseline_df, output_df=None):
         (row["X"], row["P"]): (row["Termination"], row["Objective"])
         for index, row in baseline_df.iterrows()
     }
-    
+
     input_df = input_df.drop(list_of_invalid_indices)
 
     input_lookup = {
@@ -171,7 +168,7 @@ def calculate_objective_errors(input_df, baseline_df, output_df=None):
         params = (row["X"], row["P"])
         if (
             params in baseline_lookup and baseline_lookup[params][0] == "optimal" and baseline_lookup[params][1] != INVALID
-            and params in input_lookup and (input_lookup[params] != INVALID or input_lookup[params] != NON_OPTIMAL)
+            and params in input_lookup and input_lookup[params] != INVALID
         ):
             # This is a signed fractional error, i.e. a negative value
             # indicates a lower objective than the baseline
