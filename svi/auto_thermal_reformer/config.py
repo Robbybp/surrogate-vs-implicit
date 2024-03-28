@@ -21,9 +21,30 @@
 import os
 import argparse
 import itertools
+import pyomo.environ as pyo
 
 
 filedir = os.path.dirname(__file__)
+
+
+PARAM_SWEEP_KEYS = [
+    'X', 'P', 'Termination', 'Time', 'Objective', 'Steam', 'Bypass Frac', 'CH4 Feed'
+]
+
+
+def get_optimization_solver(options=None):
+    # Use cyipopt for everything for Ipopt version consistency among all
+    # formulations
+    solver = pyo.SolverFactory("cyipopt")
+    if options is None:
+        options = {}
+    solver.config.options["max_iter"] = 300
+    solver.config.options["linear_solver"] = "ma27"
+    solver.config.options["tol"] = 1e-7
+    solver.config.options["print_user_options"] = "yes"
+    for key, val in options.items():
+        solver.config.options[key] = val
+    return solver
 
 
 def get_data_dir():
@@ -65,6 +86,12 @@ def get_sweep_argparser():
     argparser.add_argument(
         "--n2", default=8, help="Default number of samples for pressure", type=int
     )
+    argparser.add_argument(
+        "--subset",
+        default=None,
+        help="Comma-separated list of integers corresponding to samples to run in the sweep",
+    )
+    argparser.add_argument("--no-save", action="store_true", help="Don't save results")
     return argparser
 
 
@@ -83,4 +110,8 @@ def get_parameter_samples(args):
     p_list = [p_lo + i * dp for i in range(n_p)]
 
     xp_samples = list(itertools.product(x_list, p_list))
+    if args.subset is not None:
+        subset = args.subset.split(",")
+        subset = [int(i) for i in subset]
+        xp_samples = [xp_samples[i] for i in subset]
     return xp_samples
