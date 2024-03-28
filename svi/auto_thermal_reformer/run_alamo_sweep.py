@@ -83,7 +83,7 @@ def main():
             df[keys[0]].append(X)
             df[keys[1]].append(P)
             df[keys[2]].append(results.solver.termination_condition)
-            if pyo.check_termination_condition(results.solver.termination_condition):
+            if pyo.check_optimal_termination(results):
                 df[keys[3]].append(dT)
                 df[keys[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
                 df[keys[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
