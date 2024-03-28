@@ -26,25 +26,14 @@ from tensorflow import keras
 dirname = os.path.dirname(__file__)
 data_dir = os.path.join(dirname, "data")
 basename_h = "keras_surrogate_high_rel"
-basename_l = "keras_surrogate_low_rel"
 keras_surrogate_h = os.path.join(data_dir, basename_h)
-keras_surrogate_l = os.path.join(data_dir, basename_l)
 
 modelh = keras.models.load_model(keras_surrogate_h)
-modell = keras.models.load_model(keras_surrogate_l)
 
-print("Layers in the High Reliability Model:")
+print("Layers:")
 for layer in modelh.layers:
     print(layer.name, layer.output_shape, layer.activation)
 
-print("\nLayers in the Low Reliability Model:")
-for layer in modell.layers:
-    print(layer.name, layer.output_shape, layer.activation)
-
-print("Model Summary - High Reliability:")
-modelh.summary()
-
-print("\nModel Summary - Low Reliability:")
-modell.summary()
-
+print("Model Summary:")
+print(modelh.summary())
 
