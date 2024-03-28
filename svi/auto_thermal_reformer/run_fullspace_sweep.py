@@ -35,6 +35,9 @@ import numpy as np
 df = {key: [] for key in config.PARAM_SWEEP_KEYS}
 
 
+INVALID = None
+
+
 def main(X,P):
     m = make_optimization_model(X,P)
 
@@ -81,30 +84,30 @@ if __name__ == "__main__":
         except AssertionError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
-             df[list(df.keys())[2]].append("AMPL Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[2]].append(INVALID)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
         except OverflowError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
              df[list(df.keys())[2]].append("Overflow Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
         except RuntimeError:
              df[list(df.keys())[0]].append(X)
              df[list(df.keys())[1]].append(P)
              df[list(df.keys())[2]].append("Runtime Error")
-             df[list(df.keys())[3]].append(999)
-             df[list(df.keys())[4]].append(999)
-             df[list(df.keys())[5]].append(999)
-             df[list(df.keys())[6]].append(999)
-             df[list(df.keys())[7]].append(999)
+             df[list(df.keys())[3]].append(INVALID)
+             df[list(df.keys())[4]].append(INVALID)
+             df[list(df.keys())[5]].append(INVALID)
+             df[list(df.keys())[6]].append(INVALID)
+             df[list(df.keys())[7]].append(INVALID)
    
     df = pd.DataFrame(df)
     print(df)

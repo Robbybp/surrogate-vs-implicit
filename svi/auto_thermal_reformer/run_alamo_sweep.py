@@ -36,6 +36,9 @@ from svi.auto_thermal_reformer.alamo_flowsheet import (
 import svi.auto_thermal_reformer.config as config
 
 
+INVALID = None
+
+
 def main():
 
     argparser = config.get_sweep_argparser()
@@ -76,25 +79,31 @@ def main():
             print(f"Solving sample {i} with X={X}, P={P}")
             results = solver.solve(m, tee=True)
             dT = timer.toc('end')
-            df[list(df.keys())[0]].append(X)
-            df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append(results.solver.termination_condition)
-            df[list(df.keys())[3]].append(dT)
-            df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
-            df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-            #df[list(df.keys())[5]].append(pyo.value(m.fs.steam_feed.flow_mol[0]))
-            df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
-            df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+            keys = config.PARAM_SWEEP_KEYS
+            df[keys[0]].append(X)
+            df[keys[1]].append(P)
+            df[keys[2]].append(results.solver.termination_condition)
+            if pyo.check_termination_condition(results.solver.termination_condition):
+                df[keys[3]].append(dT)
+                df[keys[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
+                df[keys[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+                df[keys[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
+                df[keys[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+            else:
+                df[keys[3]].append(INVALID)
+                df[keys[4]].append(INVALID)
+                df[keys[5]].append(INVALID)
+                df[keys[6]].append(INVALID)
+                df[keys[7]].append(INVALID)
         except ValueError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("ValueError")
-            df[list(df.keys())[3]].append(999)
-            df[list(df.keys())[4]].append(999)
-            df[list(df.keys())[5]].append(999)
-            df[list(df.keys())[6]].append(999)
+            df[list(df.keys())[3]].append(INVALID)
+            df[list(df.keys())[4]].append(INVALID)
+            df[list(df.keys())[5]].append(INVALID)
+            df[list(df.keys())[6]].append(INVALID)
             df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
-            continue
 
     df = pd.DataFrame(df)
     print(df)
