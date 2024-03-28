@@ -66,7 +66,8 @@ def main():
     """
 
     xp_samples = config.get_parameter_samples(args)
-    
+    NON_OPTIMAL = "NaN"
+
     for X, P in xp_samples:
         try: 
             m = create_instance(X, P, surrogate_fname=surrogate_fname)
@@ -83,23 +84,35 @@ def main():
             timer.tic('starting timer')
             results = solver.solve(m, tee=True)
             dT = timer.toc('end')
-            df[list(df.keys())[0]].append(X)
-            df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append(results.solver.termination_condition)
-            df[list(df.keys())[3]].append(dT)
-            df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
-            df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-            df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
-            df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+
+            if results.solver.termination_condition == pyo.TerminationCondition.optimal:   
+                df[list(df.keys())[0]].append(X)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append(results.solver.termination_condition)
+                df[list(df.keys())[3]].append(dT)
+                df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
+                df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+                df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
+                df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+            else:
+                df[list(df.keys())[0]].append(X)
+                df[list(df.keys())[1]].append(P)
+                df[list(df.keys())[2]].append(NON_OPTIMAL)
+                df[list(df.keys())[3]].append(NON_OPTIMAL)
+                df[list(df.keys())[4]].append(NON_OPTIMAL)
+                df[list(df.keys())[5]].append(NON_OPTIMAL)
+                df[list(df.keys())[6]].append(NON_OPTIMAL)
+                df[list(df.keys())[7]].append(NON_OPTIMAL)
+        
         except ValueError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append("ValueError")
-            df[list(df.keys())[3]].append(999)
-            df[list(df.keys())[4]].append(999)
-            df[list(df.keys())[5]].append(999)
-            df[list(df.keys())[6]].append(999)
-            df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+            df[list(df.keys())[2]].append(NON_OPTIMAL)
+            df[list(df.keys())[3]].append(NON_OPTIMAL)
+            df[list(df.keys())[4]].append(NON_OPTIMAL)
+            df[list(df.keys())[5]].append(NON_OPTIMAL)
+            df[list(df.keys())[6]].append(NON_OPTIMAL)
+            df[list(df.keys())[7]].append(NON_OPTIMAL)
             continue
 
     df = pd.DataFrame(df)
