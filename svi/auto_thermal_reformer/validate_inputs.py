@@ -20,6 +20,7 @@
 #  __________________________________________________________________________
 
 import pyomo.environ as pyo
+from pyomo.common.timing import HierarchicalTimer
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from svi.auto_thermal_reformer.fullspace_flowsheet import make_simulation_model
 from svi.validate import validate_solution
@@ -34,7 +35,9 @@ results
 """
 
 
-def simulate_model(m, tee=True):
+def simulate_model(m, tee=True, timer=None):
+    if timer is None:
+        timer = HierarchicalTimer()
     # Use scipy.fsolve (Powell trust region) as it seems a little more
     # reliable than Ipopt, and is not slower for small systems, despite
     # SciPy's implementation not exploiting sparsity.
@@ -44,6 +47,7 @@ def simulate_model(m, tee=True):
     solver = pyo.SolverFactory("scipy.fsolve")
     solver.options["xtol"] = 1e-12
     #solver.options["tol"] = 1e-10
+    timer.start("solve-scc")
     solve_strongly_connected_components(
         m,
         solver=solver,
@@ -51,18 +55,23 @@ def simulate_model(m, tee=True):
         # Hard-code tee=False for sub-solvers
         solve_kwds=dict(tee=False),
     )
+    timer.stop("solve-scc")
     postsolver = pyo.SolverFactory("ipopt")
     # Can't figure out how to set options...
     #postsolver = pyo.SolverFactory("ipopt_v2")
     postsolver.options["tol"] = 1e-9
     postsolver.options["print_user_options"] = "yes"
+    timer.start("post-solve")
     res = postsolver.solve(m, tee=True)
+    timer.stop("post-solve")
     return res
 
 
-def validate_model_simulation(m, feastol=0.0):
+def validate_model_simulation(m, feastol=0.0, timer=None):
+    if timer is None:
+        timer = HierarchicalTimer()
     try:
-        simulate_model(m)
+        simulate_model(m, timer=timer)
     except (ValueError, RuntimeError) as err:
         # We sometimes get ValueErrors when Ipopt throws an error, even when the
         # solve is acceptable. In this case, the solution doesn't get loaded into
@@ -71,7 +80,9 @@ def validate_model_simulation(m, feastol=0.0):
         print(err)
         print("WARNING: Continuing with validation despite error")
         pass
+    timer.start("validate")
     valid, violations = validate_solution(m, tolerance=feastol)
+    timer.stop("validate")
     return valid, violations
 
 
@@ -107,6 +118,9 @@ def main():
     bypass = df["Bypass Frac"][row]
     ch4_feed = df["CH4 Feed"][row]
 
+    timer = HierarchicalTimer()
+
+    timer.start("make-model")
     m = make_simulation_model(
         pressure,
         conversion=conversion,
@@ -114,9 +128,12 @@ def main():
         bypass_fraction=bypass,
         feed_flow_CH4=ch4_feed,
     )
+    timer.stop("make-model")
     m._obj = pyo.Objective(expr=0.0)
     add_external_function_libraries_to_environment(m)
-    validate_model_simulation(m, feastol=args.feastol)
+    validate_model_simulation(m, feastol=args.feastol, timer=timer)
+
+    print(timer)
 
 
 if __name__ == "__main__":
