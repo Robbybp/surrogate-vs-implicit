@@ -77,36 +77,45 @@ def validate_results(df, feastol=0.0):
     df_val_res = {'X':[], 'P':[], 'Feasible': [], 'Infeasibility': [], 'Objective':[]}
 
     for index, row in validation_inputs.iterrows():
+        solver_converged = (df["Termination"][index] == "optimal")
         X = row['X']
         P = row['P']
-        Steam = row['Steam']
-        Bypass_Frac = row['Bypass Frac']
-        CH4_Feed = row['CH4 Feed']
+        if solver_converged:
+            Steam = row['Steam']
+            Bypass_Frac = row['Bypass Frac']
+            CH4_Feed = row['CH4 Feed']
 
-        m = make_simulation_model(
-            P,
-            conversion=X,
-            flow_H2O=Steam,
-            bypass_fraction=Bypass_Frac,
-            feed_flow_CH4=CH4_Feed,
-        )
-        add_external_function_libraries_to_environment(m)
-        valid, violations = validate_model_simulation(m, feastol=feastol)
-        con_violations, bound_violations = violations
-        default = (None, None, 0.0)
+            m = make_simulation_model(
+                P,
+                conversion=X,
+                flow_H2O=Steam,
+                bypass_fraction=Bypass_Frac,
+                feed_flow_CH4=CH4_Feed,
+            )
+            add_external_function_libraries_to_environment(m)
+            valid, violations = validate_model_simulation(m, feastol=feastol)
+            con_violations, bound_violations = violations
+            default = (None, None, 0.0)
 
-        con_infeas = abs(
-            max(con_violations, key=lambda item: abs(item[2]), default=default)[2]
-        )
-        bound_infeas = abs(
-            max(bound_violations, key=lambda item: abs(item[2]), default=default)[2]
-        )
-        infeas = max(con_infeas, bound_infeas)
-        df_val_res['X'].append(X)
+            con_infeas = abs(
+                max(con_violations, key=lambda item: abs(item[2]), default=default)[2]
+            )
+            bound_infeas = abs(
+                max(bound_violations, key=lambda item: abs(item[2]), default=default)[2]
+            )
+            infeas = max(con_infeas, bound_infeas)
+            objval = value(m.fs.product.mole_frac_comp[0, "H2"])
+        else:
+            # If the solver didn't converge, we don't even attempt to validate
+            infeas = None
+            valid = False
+            objval = None
+
+        df_val_res['X'].append(row["X"])
         df_val_res['P'].append(P)
         df_val_res['Infeasibility'].append(infeas)
         df_val_res['Feasible'].append(valid)
-        df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+        df_val_res['Objective'].append(objval)
 
     df_val_res = pd.DataFrame(df_val_res)
     return df_val_res
@@ -152,7 +161,10 @@ def calculate_objective_errors(input_df, baseline_df, output_df=None):
     for i, row in output_df.iterrows():
         params = (row["X"], row["P"])
         if (
-            params in baseline_lookup and baseline_lookup[params][0] == "optimal" and baseline_lookup[params][1] != INVALID
+            # With theserchecks,
+            params in baseline_lookup
+            and baseline_lookup[params][0] == "optimal"
+            and baseline_lookup[params][1] != INVALID
             and params in input_lookup and input_lookup[params] != INVALID
         ):
             # This is a signed fractional error, i.e. a negative value
