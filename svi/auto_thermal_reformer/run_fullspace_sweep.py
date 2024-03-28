@@ -62,7 +62,7 @@ def main(X,P):
         # If the solver didn't converge, we don't care about the solve time,
         # the objective, or any of the degree of freedom values.
         for i in range(3, 8):
-            df[config.PARAM_SWEEP_KEYS[i]].append(None)
+            df[config.PARAM_SWEEP_KEYS[i]].append(INVALID)
 
 
 if __name__ == "__main__":
