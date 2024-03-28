@@ -73,8 +73,8 @@ def _get_nn_surrogate_fname():
     # TODO: Accept arguments so we can override the default results dir.
     # Note that this function is essentially hard-coding the default
     # surrogate file.
-    default_results_dir = config.get_results_dir()
-    return os.path.join(default_results_dir, DEFAULT_SURROGATE_FNAME)
+    default_data_dir = config.get_data_dir()
+    return os.path.join(default_data_dir, DEFAULT_SURROGATE_FNAME)
 
 
 def create_instance(
