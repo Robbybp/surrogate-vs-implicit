@@ -77,11 +77,7 @@ def main():
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
 
-            solver = get_solver()
-            solver.options = {
-                "tol": 1e-7,
-                "max_iter": 300
-            }
+            solver = config.get_optimization_solver()
             timer = TicTocTimer()
             timer.tic('starting timer')
             results = solver.solve(m, tee=True)
