@@ -49,12 +49,14 @@ import seaborn as sns
 import argparse
 
 
+INVALID = None
+
+
 """Script for validating the results of a parameter sweep by simulating
 with the full-space model and, if a baseline parameter sweep file is given,
 comparing errors between the simulation and this baseline.
 
 """
-
 
 ###### FUNCTION TO VALIDATE ALAMO AND NEURAL NETWORK RESULTS ######
 
@@ -68,7 +70,7 @@ def validate_results(df, feastol=0.0):
 
     """
     # Parse the data needed for validation
-    validation_inputs = df[['X', 'P', 'Steam', 'Bypass Frac', 'CH4 Feed']]
+    validation_inputs = df[['X', 'P', 'Termination', 'Steam', 'Bypass Frac', 'CH4 Feed']]
 
     # Create an empty dataframe to store the objective value from the validation process.
     # df_val_res stores the result of the full space simulation that takes surrogate DOF
@@ -79,40 +81,48 @@ def validate_results(df, feastol=0.0):
     for index, row in validation_inputs.iterrows():
         X = row['X']
         P = row['P']
+        print(f"Validating sample {index} with X={X}, P={P}")
+        Termination = row['Termination']
         Steam = row['Steam']
         Bypass_Frac = row['Bypass Frac']
         CH4_Feed = row['CH4 Feed']
+        
+        if Termination == "optimal":
+            m = make_simulation_model(
+                P,
+                conversion=X,
+                flow_H2O=Steam,
+                bypass_fraction=Bypass_Frac,
+                feed_flow_CH4=CH4_Feed,
+            )
+            add_external_function_libraries_to_environment(m)
+            valid, violations = validate_model_simulation(m, feastol=feastol)
+            con_violations, bound_violations = violations
+            default = (None, None, 0.0)
 
-        m = make_simulation_model(
-            P,
-            conversion=X,
-            flow_H2O=Steam,
-            bypass_fraction=Bypass_Frac,
-            feed_flow_CH4=CH4_Feed,
-        )
-        add_external_function_libraries_to_environment(m)
-        valid, violations = validate_model_simulation(m, feastol=feastol)
-        con_violations, bound_violations = violations
-        default = (None, None, 0.0)
-
-        con_infeas = abs(
-            max(con_violations, key=lambda item: abs(item[2]), default=default)[2]
-        )
-        bound_infeas = abs(
-            max(bound_violations, key=lambda item: abs(item[2]), default=default)[2]
-        )
-        infeas = max(con_infeas, bound_infeas)
-        df_val_res['X'].append(X)
-        df_val_res['P'].append(P)
-        df_val_res['Infeasibility'].append(infeas)
-        df_val_res['Feasible'].append(valid)
-        df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+            con_infeas = abs(
+                max(con_violations, key=lambda item: abs(item[2]), default=default)[2]
+            )
+            bound_infeas = abs(
+                max(bound_violations, key=lambda item: abs(item[2]), default=default)[2]
+            )
+            infeas = max(con_infeas, bound_infeas)
+            df_val_res['X'].append(X)
+            df_val_res['P'].append(P)
+            df_val_res['Infeasibility'].append(infeas)
+            df_val_res['Feasible'].append(valid)
+            df_val_res['Objective'].append(value(m.fs.product.mole_frac_comp[0,'H2']))
+        else:
+            print("Optimization did not converge successfully. Skipping validation.")
+            df_val_res['X'].append(X)
+            df_val_res['P'].append(P)
+            df_val_res['Infeasibility'].append(INVALID)
+            df_val_res['Feasible'].append(INVALID)
+            df_val_res['Objective'].append(INVALID)
 
     df_val_res = pd.DataFrame(df_val_res)
+
     return df_val_res
-
-
-INVALID = 999
 
 
 def calculate_objective_errors(input_df, baseline_df, output_df=None):
@@ -136,11 +146,16 @@ def calculate_objective_errors(input_df, baseline_df, output_df=None):
     for index, row in df_val_res.iterrows():
         if row['Objective'] == INVALID:
             list_of_invalid_indices.append(index)
+    
+    baseline_df = baseline_df.drop(list_of_invalid_indices)
 
     baseline_lookup = {
         (row["X"], row["P"]): (row["Termination"], row["Objective"])
         for index, row in baseline_df.iterrows()
     }
+
+    input_df = input_df.drop(list_of_invalid_indices)
+
     input_lookup = {
         # TODO: This input row should have a "feasible" field we can check
         (row["X"], row["P"]): row["Objective"]
