@@ -107,7 +107,7 @@ def analyze_results(
     n_success = len(success_rows)
     # Should we use len(subset) as the denominator? Kind of seems like yes
     percent_conv = round(n_success / n_subset * 100, 1)
-    print(f"Converged {n_success} / {n_success} ({percent_conv}%) instances")
+    print(f"Converged {n_success} / {n_subset} ({percent_conv}%) instances")
 
     subset_success = [i for i in success_rows if i in subset_set]
     solve_times = [data["Time"][i] for i in subset_success]
@@ -137,6 +137,10 @@ def analyze_results(
         print(
             "Of these, the max relative objective difference,"
             f" (experiment - baseline) / baseline, is {max(obj_errors)}"
+        )
+        print(
+            "Of these, the min relative objective difference,"
+            f" (experiment - baseline) / baseline, is {min(obj_errors)}"
         )
         # median objective error?
 

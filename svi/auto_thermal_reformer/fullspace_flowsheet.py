@@ -456,24 +456,6 @@ def make_optimization_model(X,P,initialize=True):
 
     return m
 
-df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
-
-def main(X,P):
-    m = make_optimization_model(X,P)
-    solver = pyo.SolverFactory('ipopt')
-    solver.options = {"tol": 1e-7, "max_iter": 1000}
-    timer = TicTocTimer()
-    timer.tic("starting timer")
-    results = solver.solve(m, tee=True)
-    dT = timer.toc("end timer")
-    df[list(df.keys())[0]].append(X)
-    df[list(df.keys())[1]].append(P)
-    df[list(df.keys())[2]].append(results.solver.termination_condition)
-    df[list(df.keys())[3]].append(dT)
-    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
-    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
-    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -36,6 +36,9 @@ from svi.auto_thermal_reformer.nn_flowsheet import (
 import svi.auto_thermal_reformer.config as config
 
 
+INVALID = None
+
+
 def main():
 
     argparser = config.get_sweep_argparser()
@@ -66,7 +69,6 @@ def main():
     """
 
     xp_samples = config.get_parameter_samples(args)
-    NON_OPTIMAL = "NaN"
 
     for X, P in xp_samples:
         try: 
@@ -75,11 +77,7 @@ def main():
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
 
-            solver = get_solver()
-            solver.options = {
-                "tol": 1e-7,
-                "max_iter": 300
-            }
+            solver = config.get_optimization_solver()
             timer = TicTocTimer()
             timer.tic('starting timer')
             results = solver.solve(m, tee=True)
@@ -97,22 +95,22 @@ def main():
             else:
                 df[list(df.keys())[0]].append(X)
                 df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append(NON_OPTIMAL)
-                df[list(df.keys())[3]].append(NON_OPTIMAL)
-                df[list(df.keys())[4]].append(NON_OPTIMAL)
-                df[list(df.keys())[5]].append(NON_OPTIMAL)
-                df[list(df.keys())[6]].append(NON_OPTIMAL)
-                df[list(df.keys())[7]].append(NON_OPTIMAL)
+                df[list(df.keys())[2]].append(INVALID)
+                df[list(df.keys())[3]].append(INVALID)
+                df[list(df.keys())[4]].append(INVALID)
+                df[list(df.keys())[5]].append(INVALID)
+                df[list(df.keys())[6]].append(INVALID)
+                df[list(df.keys())[7]].append(INVALID)
         
         except ValueError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append(NON_OPTIMAL)
-            df[list(df.keys())[3]].append(NON_OPTIMAL)
-            df[list(df.keys())[4]].append(NON_OPTIMAL)
-            df[list(df.keys())[5]].append(NON_OPTIMAL)
-            df[list(df.keys())[6]].append(NON_OPTIMAL)
-            df[list(df.keys())[7]].append(NON_OPTIMAL)
+            df[list(df.keys())[2]].append(INVALID)
+            df[list(df.keys())[3]].append(INVALID)
+            df[list(df.keys())[4]].append(INVALID)
+            df[list(df.keys())[5]].append(INVALID)
+            df[list(df.keys())[6]].append(INVALID)
+            df[list(df.keys())[7]].append(INVALID)
             continue
 
     df = pd.DataFrame(df)

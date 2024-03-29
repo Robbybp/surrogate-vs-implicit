@@ -65,6 +65,7 @@ from idaes.core.surrogate.keras_surrogate import (
 import svi.auto_thermal_reformer.fullspace_flowsheet as fullspace
 import svi.auto_thermal_reformer.config as config
 
+
 DEFAULT_SURROGATE_FNAME = "keras_surrogate_high_rel"
 
 
@@ -72,8 +73,9 @@ def _get_nn_surrogate_fname():
     # TODO: Accept arguments so we can override the default results dir.
     # Note that this function is essentially hard-coding the default
     # surrogate file.
-    default_results_dir = config.get_results_dir()
-    return os.path.join(default_results_dir, DEFAULT_SURROGATE_FNAME)
+    default_data_dir = config.get_data_dir()
+    return os.path.join(default_data_dir, DEFAULT_SURROGATE_FNAME)
+
 
 def create_instance(
     conversion,
@@ -91,14 +93,14 @@ def create_instance(
         con.deactivate()
     for con in m.fs.reformer_mix.component_objects(pyo.Constraint):
         con.deactivate()
-    
+
     m.fs.REF_IN_expanded.deactivate()
 
     ########## DEFINE SURROGATE BLOCK FOR THE ATR ##########
     m.fs.reformer_surrogate = SurrogateBlock()
 
     m.fs.reformer.conversion.fix(conversion)
-    
+
     m.fs.reformer_surrogate.conversion = pyo.Reference(m.fs.reformer.conversion)
 
     ########## CREATE OUTLET VARS FOR ATR SURROGATE ##########
@@ -139,10 +141,10 @@ def create_instance(
     keras_surrogate = KerasSurrogate.load_from_folder(surrogate_fname)
 
     m.fs.reformer_surrogate.build_model(
-    keras_surrogate,
-    formulation=KerasSurrogate.Formulation.FULL_SPACE,
-    input_vars=inputs,
-    output_vars=outputs,
+        keras_surrogate,
+        formulation=KerasSurrogate.Formulation.FULL_SPACE,
+        input_vars=inputs,
+        output_vars=outputs,
     )
 
     m.fs.reformer_surrogate.out_mole_frac_comp[0, "C4H10"].fix(1e-16)
@@ -156,6 +158,7 @@ def create_instance(
     fullspace.add_obj_and_constraints(m)
 
     return m
+
 
 def initialize_nn_atr_flowsheet(m):
     m.fs.reformer_recuperator.initialize()
@@ -172,35 +175,17 @@ def initialize_nn_atr_flowsheet(m):
     m.fs.reformer_bypass.initialize()
 
 
-#df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
-#
-#if __name__ == "__main__":
-#
-#    for X in np.arange(0.90,0.98,0.01): 
-#        for P in np.arange(1447379,1947379,70000):
-#            m = create_instance(X, P) 
-#            initialize_nn_atr_flowsheet(m)
-#            m.fs.reformer_bypass.inlet.temperature.unfix()
-#            m.fs.reformer_bypass.inlet.flow_mol.unfix()
-#            
-#            solver = pyo.SolverFactory('ipopt', executable = '~/.local/bin/ipopt')
-#            solver.options = {
-#                "tol": 1e-7,
-#                "max_iter": 300
-#            }
-#
-#            timer = TicTocTimer()
-#            timer.tic('starting timer')
-#            results = solver.solve(m, tee=True)
-#            dT = timer.toc('end')
-#            df[list(df.keys())[0]].append(X)
-#            df[list(df.keys())[1]].append(P)
-#            df[list(df.keys())[2]].append(results.solver.termination_condition)
-#            df[list(df.keys())[3]].append(dT)
-#            df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0, 'H2']))
-#            df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-#            df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
-#            df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
-#
-#df = pd.DataFrame(df)
-#df.to_csv('nn_experiment.csv')
+if __name__ == "__main__":
+
+    X = 0.95
+    P = 1650000.0
+    m = create_instance(X, P) 
+    initialize_nn_atr_flowsheet(m)
+    m.fs.reformer_bypass.inlet.temperature.unfix()
+    m.fs.reformer_bypass.inlet.flow_mol.unfix()
+
+    solver = config.get_optimization_solver()
+    timer = TicTocTimer()
+    timer.tic('starting timer')
+    results = solver.solve(m, tee=True)
+    dT = timer.toc('end')
