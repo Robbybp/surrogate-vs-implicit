@@ -40,6 +40,8 @@ from idaes.core.solvers import get_solver
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
 from svi.auto_thermal_reformer.reactor_model import create_instance
 
+import time
+
 ####### FUNCTION TO GENERATE DATA FOR THE AUTOTHERMAL REFORMER #######
 
 # Inputs: Fin_CH4 [mol/s],Tin_CH4 [K],Fin_H2O [mol/s],Conversion
@@ -48,7 +50,8 @@ from svi.auto_thermal_reformer.reactor_model import create_instance
 def atr_data_gen(num_samples = 600):
     df = {'Fin_CH4':[], 'Tin_CH4':[], 'Fin_H2O':[], 'Conversion': [], 'HeatDuty':[], 'Fout':[], 'Tout':[], 'H2':[], 
       'CO':[], 'H2O':[], 'CO2':[], 'CH4':[], 'C2H6':[], 'C3H8':[], 'C4H10':[], 'N2':[], 'O2':[], 'Ar':[]}
-   
+
+    t_start = time.time()
     for _ in range(num_samples):
         try: 
             conversion = random.uniform(0.80,0.96)
@@ -56,10 +59,12 @@ def atr_data_gen(num_samples = 600):
             flow_mol_gas = random.uniform(600,900)
             temp_gas = random.uniform(600,900)
 
-            m = create_instance(conversion,
-                                flow_mol_h2o,
-                                flow_mol_gas,
-                                temp_gas)
+            m = create_instance(
+                conversion,
+                flow_mol_h2o,
+                flow_mol_gas,
+                temp_gas,
+            )
 
             ######### SOLVE #########
             solver = get_solver()
@@ -67,7 +72,7 @@ def atr_data_gen(num_samples = 600):
                 "tol": 1e-8,
                 "max_iter": 400
             }
-            solver.solve(m, tee=False)
+            solver.solve(m, tee=True)
 
             df[list(df.keys())[0]].append(flow_mol_gas)
             df[list(df.keys())[1]].append(temp_gas)
@@ -87,10 +92,14 @@ def atr_data_gen(num_samples = 600):
             df[list(df.keys())[15]].append(pyo.value(m.fs.reformer.outlet.mole_frac_comp[0, "N2"]))
             df[list(df.keys())[16]].append(pyo.value(m.fs.reformer.outlet.mole_frac_comp[0, "O2"]))
             df[list(df.keys())[17]].append(pyo.value(m.fs.reformer.outlet.mole_frac_comp[0, "Ar"]))
-        except InitializationError:
+        except InitializationError as err:
+            print(err)
             continue
-        except ValueError:
+        except ValueError as err:
+            print(err)
             continue
+    t_generate_samples = time.time() - t_start
+    print(f"Time to sample inputs and generate data: {t_generate_samples}")
     df = pd.DataFrame(df)
     df.to_csv('data_atr.csv')
     return df
