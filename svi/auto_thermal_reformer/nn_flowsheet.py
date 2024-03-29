@@ -147,7 +147,7 @@ def create_instance(
         output_vars=outputs,
     )
 
-    m.fs.reformer_surrogate.out_mole_frac_comp[0, "C4H10"].fix(1e-16)
+    m.fs.reformer_surrogate.out_mole_frac_comp[0, "C4H10"].fix(1e-17)
     m.fs.reformer_surrogate.out_mole_frac_comp[0, "O2"].fix(1e-20)
 
     m.fs.reformer_bypass.reformer_outlet_state[0.0].flow_mol.setlb(0.0)
