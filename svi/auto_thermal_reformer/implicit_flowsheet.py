@@ -20,7 +20,7 @@
 #  ___________________________________________________________________________
 import pandas as pd
 import numpy as np
-from pyomo.common.timing import TicTocTimer
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -63,8 +63,10 @@ from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
 
 from svi.external import add_external_function_libraries_to_environment
 from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
+import svi.auto_thermal_reformer.config as config
 
-def make_implicit(m):
+def make_implicit(m, **kwds):
+    timer = kwds.pop("timer", HierarchicalTimer())
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
     full_igraph = IncidenceGraphInterface(m)
     reformer_igraph = IncidenceGraphInterface(m.fs.reformer, include_inequality=False)
@@ -134,6 +136,8 @@ def make_implicit(m):
         external_vars,
         residual_eqns,
         external_eqns,
+        timer=timer,
+        solver_options=dict(use_calc_var=False),
     )
 
     ########### CONNECT FLOWSHEET TO THE IMPLICIT AUTOTHERMAL REFORMER ###########
@@ -158,51 +162,22 @@ def make_implicit(m):
 
     return m_implicit
 
-df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
-
-def main(X,P):
-    m = make_optimization_model(X,P)
-    add_external_function_libraries_to_environment(m)
-    m_implicit = make_implicit(m)
-    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 100})
-    timer = TicTocTimer()
-    timer.tic("starting timer")
-    print(X,P)
-    results = solver.solve(m_implicit, tee=True)
-    dT = timer.toc("end timer")
-    df[list(df.keys())[0]].append(X)
-    df[list(df.keys())[1]].append(P)
-    df[list(df.keys())[2]].append(results.solver.termination_condition)
-    df[list(df.keys())[3]].append(dT)
-    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
-    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
-    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
 
 if __name__ == "__main__":
-    for X in np.arange(0.90,0.98,0.01):
-        for P in np.arange(1447379,1947379,70000):
-            try:
-                main(X,P)
-            except PyNumeroEvaluationError:
-                df[list(df.keys())[0]].append(X)
-                df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append("AMPL Error")
-                df[list(df.keys())[3]].append(999)
-                df[list(df.keys())[4]].append(999)
-                df[list(df.keys())[5]].append(999)
-                df[list(df.keys())[6]].append(999)
-                df[list(df.keys())[7]].append(999)
-            except RuntimeError:
-                df[list(df.keys())[0]].append(X)
-                df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append("AMPL Error")
-                df[list(df.keys())[3]].append(999)
-                df[list(df.keys())[4]].append(999)
-                df[list(df.keys())[5]].append(999)
-                df[list(df.keys())[6]].append(999)
-                df[list(df.keys())[7]].append(999)
-
-
-df = pd.DataFrame(df)
-df.to_csv("implicit_experiment.csv")
+    X = 0.95
+    P = 1550000.0
+    m = make_optimization_model(X,P)
+    add_external_function_libraries_to_environment(m)
+    htimer = HierarchicalTimer()
+    timer = TicTocTimer()
+    timer.tic()
+    m_implicit = make_implicit(m, timer=htimer)
+    timer.toc("made model")
+    solver = config.get_optimization_solver()
+    print(X,P)
+    htimer.start("solve")
+    results = solver.solve(m_implicit, tee=True)
+    htimer.stop("solve")
+    timer.toc("solved model")
+    dT = timer.toc("end timer")
+    print(htimer)
