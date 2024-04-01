@@ -81,7 +81,8 @@ def create_instance(
     conversion,
     pressure,
     initialize=True,
-    surrogate_fname=None
+    surrogate_fname=None,
+    formulation=KerasSurrogate.Formulation.FULL_SPACE,
 ):
 
     if surrogate_fname is None:
@@ -142,7 +143,7 @@ def create_instance(
 
     m.fs.reformer_surrogate.build_model(
         keras_surrogate,
-        formulation=KerasSurrogate.Formulation.FULL_SPACE,
+        formulation=formulation,
         input_vars=inputs,
         output_vars=outputs,
     )

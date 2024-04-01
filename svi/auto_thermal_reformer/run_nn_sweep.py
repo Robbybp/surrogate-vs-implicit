@@ -33,10 +33,17 @@ from svi.auto_thermal_reformer.nn_flowsheet import (
     # pass in our parsed arguments. (Or make these arguments a global data structure)
     DEFAULT_SURROGATE_FNAME,
 )
+from idaes.core.surrogate.keras_surrogate import KerasSurrogate
 import svi.auto_thermal_reformer.config as config
 
 
 INVALID = None
+
+
+FORMULATION_MAP = {
+    "full": KerasSurrogate.Formulation.FULL_SPACE,
+    "reduced": KerasSurrogate.Formulation.REDUCED_SPACE,
+}
 
 
 def main():
@@ -44,7 +51,8 @@ def main():
     argparser = config.get_sweep_argparser()
     argparser.add_argument(
         "--fname",
-        default="nn-sweep.csv",
+        # Default depends on full vs. reduced space and is defined below
+        default=None,
         help="Base file name for parameter sweep results",
     )
 
@@ -54,10 +62,24 @@ def main():
         help="File name for the surrogate",
     )
 
+    argparser.add_argument(
+        "--formulation",
+        default="full",
+        help=(
+            "Formulation for embedding neural network surrogate into optimization model."
+            " Must be 'full' or 'reduced'."
+        ),
+    )
+
     args = argparser.parse_args()
 
+    formulation = FORMULATION_MAP[args.formulation]
+
+    if args.fname is None:
+        sweep_fname = f"nn-sweep-{args.formulation}.csv"
+
     surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
-    output_fpath = os.path.join(args.data_dir, args.fname)
+    output_fpath = os.path.join(args.data_dir, sweep_fname)
 
     df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
 
@@ -72,7 +94,7 @@ def main():
 
     for X, P in xp_samples:
         try: 
-            m = create_instance(X, P, surrogate_fname=surrogate_fname)
+            m = create_instance(X, P, surrogate_fname=surrogate_fname, formulation=formulation)
             initialize_nn_atr_flowsheet(m)
             m.fs.reformer_bypass.inlet.temperature.unfix()
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
