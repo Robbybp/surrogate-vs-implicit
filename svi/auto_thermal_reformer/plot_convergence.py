@@ -53,6 +53,7 @@ argparser.add_argument("--show", action="store_true", help="Flag to show the plo
 argparser.add_argument("--no-save", action="store_true", help="Flag to not save the plot")
 argparser.add_argument("--plot-fname", default=None, help="Basename for plot file")
 argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude a legend")
+argparser.add_argument("--title", default=None, help="Plot title")
 
 
 def plot_convergence_reliability(
@@ -60,6 +61,7 @@ def plot_convergence_reliability(
     validation_df=None,
     feastol=None,
     legend=True,
+    title=None,
 ):
     # To determine whether to plot as a "success", I want to check:
     # - sweep["Termination"]
@@ -101,7 +103,13 @@ def plot_convergence_reliability(
         aggfunc="first",
     )
 
-    fig = plt.figure(figsize=(10, 7))
+    FONTSIZE = 28
+    plt.rcParams["font.size"] = FONTSIZE
+    if legend:
+        fig = plt.figure(figsize=(10, 7))
+    else:
+        fig = plt.figure(figsize=(7, 7))
+        #fig = plt.figure()
     # Annoyingly, the default figure size seems to cut off the legend...
     #fig = plt.figure()
 
@@ -120,9 +128,12 @@ def plot_convergence_reliability(
 
     # This function should plot on a pair of axes. The title and filename can be set
     # outside of this function.
-    # plt.title(name+' Formulation', fontsize = 18.5)
-    plt.xlabel("Pressure (MPa)", fontsize=18.5)
-    plt.ylabel("Conversion", fontsize=18.5)
+    # plt.title(name+' Formulation')
+    plt.xlabel("Pressure (MPa)")
+    plt.ylabel("Conversion")
+    if title is not None:
+        # Write the title in a larger font
+        ax.set_title(title, fontsize=1.2*FONTSIZE)
 
     original_labels_conversion = [0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97]
     new_labels_conversion = [0.91, 0.93, 0.95, 0.97]
@@ -130,15 +141,15 @@ def plot_convergence_reliability(
         label if label in new_labels_conversion else ""
         for label in original_labels_conversion
     ]
-    ax.set_yticklabels(labels_conversion_plotting, fontsize=16.5, rotation=0)
+    ax.set_yticklabels(labels_conversion_plotting, rotation=0)
 
     original_labels_pressure = [1.45, 1.52, 1.59, 1.66, 1.73, 1.80, 1.87, 1.94]
     new_labels_pressure = [1.52, 1.66, 1.80, 1.94]
     labels_pressure_plotting = [
-        label if label in new_labels_pressure else ""
+        "%1.2f" % label if label in new_labels_pressure else ""
         for label in original_labels_pressure
     ]
-    ax.set_xticklabels(labels_pressure_plotting, fontsize=16.5)
+    ax.set_xticklabels(labels_pressure_plotting, rotation=0)
 
     if legend:
         legend_handles = [
@@ -148,7 +159,6 @@ def plot_convergence_reliability(
         ax.legend(
             handles=legend_handles,
             ncol=1,
-            fontsize=16,
             handlelength=0.8,
             bbox_to_anchor=(1.05, 1),
             loc="upper left",
@@ -173,6 +183,7 @@ if __name__ == "__main__":
         validation_df=validation_df,
         feastol=args.feastol,
         legend=not args.no_legend,
+        title=args.title,
     )
 
     if not args.no_save:
