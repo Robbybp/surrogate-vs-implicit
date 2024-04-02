@@ -24,7 +24,7 @@ import os
 import itertools
 import pandas as pd
 import pyomo.environ as pyo
-from pyomo.common.timing import TicTocTimer
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 from idaes.core.solvers import get_solver
 from svi.auto_thermal_reformer.nn_flowsheet import (
     create_instance,
@@ -81,7 +81,7 @@ def main():
     surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
     output_fpath = os.path.join(args.data_dir, sweep_fname)
 
-    df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Frac': [], 'CH4 Feed':[]}
+    df = {key: [] for key in config.PARAM_SWEEP_KEYS}
 
     """
     The optimization problem to solve is the following:
@@ -100,40 +100,48 @@ def main():
             m.fs.reformer_bypass.inlet.flow_mol.unfix()
 
             solver = config.get_optimization_solver()
+            intermediate_cb = solver.config.intermediate_callback
+            htimer = HierarchicalTimer()
             timer = TicTocTimer()
             timer.tic('starting timer')
-            results = solver.solve(m, tee=True)
+            results = solver.solve(m, tee=True, timer=htimer)
             dT = timer.toc('end')
+            f_eval_time = htimer.timers["solve"].timers["function"].total_time
+            j_eval_time = htimer.timers["solve"].timers["jacobian"].total_time
+            h_eval_time = htimer.timers["solve"].timers["hessian"].total_time
 
             if results.solver.termination_condition == pyo.TerminationCondition.optimal:   
                 df[list(df.keys())[0]].append(X)
                 df[list(df.keys())[1]].append(P)
                 df[list(df.keys())[2]].append(results.solver.termination_condition)
-                df[list(df.keys())[3]].append(dT)
-                df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0, 'H2']))
-                df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-                df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0, 'bypass_outlet']))
-                df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+                df["Time"].append(dT)
+                df["Objective"].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
+                df["Steam"].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+                df["Bypass Frac"].append(pyo.value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+                df["CH4 Feed"].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+                df["Iterations"].append(len(intermediate_cb.iterate_data))
+                df["function-time"].append(f_eval_time)
+                df["jacobian-time"].append(j_eval_time)
+                df["hessian-time"].append(h_eval_time)
             else:
                 df[list(df.keys())[0]].append(X)
                 df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append(INVALID)
-                df[list(df.keys())[3]].append(INVALID)
-                df[list(df.keys())[4]].append(INVALID)
-                df[list(df.keys())[5]].append(INVALID)
-                df[list(df.keys())[6]].append(INVALID)
-                df[list(df.keys())[7]].append(INVALID)
+                df[list(df.keys())[2]].append(results.solver.termination_condition)
+                # If the solver didn't converge, we don't care about the solve time,
+                # the objective, or any of the degree of freedom values.
+                for key in config.PARAM_SWEEP_KEYS:
+                    if key not in ("X", "P", "Termination"):
+                        df[key].append(INVALID)
         
         except ValueError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
-            df[list(df.keys())[2]].append(INVALID)
-            df[list(df.keys())[3]].append(INVALID)
-            df[list(df.keys())[4]].append(INVALID)
-            df[list(df.keys())[5]].append(INVALID)
-            df[list(df.keys())[6]].append(INVALID)
-            df[list(df.keys())[7]].append(INVALID)
-            continue
+            df[list(df.keys())[2]].append("ValueError")
+            # If the solver didn't converge, we don't care about the solve time,
+            # the objective, or any of the degree of freedom values.
+            for key in config.PARAM_SWEEP_KEYS:
+                if key not in ("X", "P", "Termination"):
+                    df[key].append(INVALID)
 
     df = pd.DataFrame(df)
     df.to_csv(output_fpath)
