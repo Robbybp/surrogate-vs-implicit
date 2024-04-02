@@ -164,6 +164,9 @@ def plot_convergence_reliability(
             loc="upper left",
             borderaxespad=0,
         )
+    rectangle = plt.Rectangle((0.03, 6), 7.94, 1.97, edgecolor='red',
+                          facecolor="none", linewidth=3, linestyle=':')
+    ax.add_patch(rectangle)
     plt.gca().invert_yaxis()
     fig.tight_layout()
     return fig, ax
