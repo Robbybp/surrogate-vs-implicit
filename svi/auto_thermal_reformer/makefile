@@ -28,21 +28,21 @@ plots:
 
 analysis:
 	python analyze_results.py \
-	    data/fullspace-sweep-cyipopt.csv \
+	    data/fullspace-sweep.csv \
 	    --feastol=1e-5\
 		--subset=$(SUBSET)
 	python analyze_results.py \
-	    data/alamo-sweep-cyipopt.csv \
-	    --validation-fpath=data/alamo-sweep-cyipopt-validation.csv \
+	    data/alamo-sweep.csv \
+		--validation-fpath=data/alamo-sweep-cyipopt-validation.csv \
 	    --feastol=1e-5 \
 		--subset=$(SUBSET)
 	python analyze_results.py \
 	    data/nn-sweep-full.csv \
-	    --validation-fpath=data/nn-sweep-full-validation.csv \
+		--validation-fpath=data/nn-sweep-full-validation.csv \
 	    --feastol=1e-5 \
 		--subset=$(SUBSET)
 	python analyze_results.py \
 	    data/implicit-sweep.csv \
-	    --validation-fpath=data/implicit-sweep-validation.csv \
+		--validation-fpath=data/implicit-sweep-validation.csv \
 	    --feastol=1e-5 \
 		--subset=$(SUBSET)
