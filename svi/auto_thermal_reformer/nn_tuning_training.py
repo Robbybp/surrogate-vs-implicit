@@ -28,32 +28,31 @@ from tensorflow import keras
 from idaes.core.surrogate.sampling.data_utils import split_training_validation
 from idaes.core.surrogate.sampling.scaling import OffsetScaler
 from idaes.core.surrogate.keras_surrogate import KerasSurrogate
-from idaes.core.surrogate.alamopy import AlamoSurrogate
-from sklearn.metrics import r2_score
+import svi.auto_thermal_reformer.config as config
+import time
 
 np.random.seed(46)
 random.seed(1342)
 tf.random.set_seed(62)
 tf.keras.backend.set_floatx('float64')
 
-def create_nn_and_compare(fname = "data_atr.csv", 
-                          tune = False,
-                          save_val = False,
-                          alamo_surr = 'alamo_surrogate_atr.json', 
-                          compare_r2 = True):
+DEFAULT_DATA_FILE = "data_atr.csv"
+DEFAULT_SURR_NAME = "keras_surrogate_high_rel"
 
-    dirname = os.path.dirname(__file__)
-    data_dir = os.path.join(dirname, "data")
-    fname_path = os.path.join(data_dir, fname)
-    csv_data = pd.read_csv(fname_path) 
+def gibbs_to_nn(fname, 
+                surrogate_fname,
+                tune,
+                activation,
+                layers,
+                neurons):
 
-    if 'Unnamed: 0' in csv_data.columns:
-        csv_data = csv_data.drop('Unnamed: 0', axis=1)
+    data = pd.read_csv(fname) 
 
-    # Drop columns that contain values less than 1e-14 so that the NN can train properly
-    csv_data = csv_data.drop(['C4H10','O2'], axis=1)
+    if 'Unnamed: 0' in data.columns:
+        data = data.drop('Unnamed: 0', axis=1)
 
-    data = csv_data
+    # Drop columns that contain values less than 1e-16 so that the NN can train properly
+    data = data.drop(['C4H10','O2'], axis=1)
 
     input_data = data.iloc[:, :4]
     output_data = data.iloc[:, 4:]
@@ -62,22 +61,22 @@ def create_nn_and_compare(fname = "data_atr.csv",
     output_labels = output_data.columns
 
     n_data = data[input_labels[0]].size
-    data_training, data_validation = split_training_validation(
-        data, 0.8, seed=n_data
-    ) 
-
-    # Save the data_validation file
-    data_val_path = os.path.join(data_dir, "data_validation.csv")
-    if save_val == True:
-        data_validation.to_csv(data_val_path)
+    
+    data_training, data_validation = split_training_validation(data, 0.8, seed=n_data) 
+    
+    optimizers = ["Adam"]
+    epochs = 400 
 
     # Define the parameter values to try
     activations = ["sigmoid", "tanh"]
-    optimizers = ["Adam"]
     n_hidden_layers_values = np.arange(2,5,1).tolist()
     n_nodes_per_layer_values = np.arange(20,31,1).tolist()
-    epochs = 400 
-
+    
+    if tune == "False":
+        activations = [activation]
+        n_hidden_layers_values = [layers]
+        n_nodes_per_layer_values = [neurons]
+    
     loss, metrics = "mse", ["mae", "mse"]
     
     best_val_loss = float("inf")  # Variable to store the best validation loss
@@ -98,97 +97,83 @@ def create_nn_and_compare(fname = "data_atr.csv",
     x = x.to_numpy()
     y = y.to_numpy()
 
-    bounds = csv_data[['Fin_CH4','Tin_CH4','Fin_H2O','Conversion']].agg(['min', 'max']).T
+    bounds = data[['Fin_CH4','Tin_CH4','Fin_H2O','Conversion']].agg(['min', 'max']).T
     input_bounds = {index: (row['min'], row['max']) for index, row in bounds.iterrows()}
 
-    if tune == True:
-        # Iterate over the parameter combinations
-        for activation in activations:
-            for optimizer in optimizers:
-                for n_hidden_layers in n_hidden_layers_values:
-                    for n_nodes_per_layer in n_nodes_per_layer_values:
-                        model = tf.keras.Sequential()
-                        model.add(tf.keras.layers.Dense(units=n_nodes_per_layer, input_dim=n_inputs, activation=activation))
-                        for _ in range(1, n_hidden_layers):
-                            model.add(tf.keras.layers.Dense(units=n_nodes_per_layer, activation=activation))
-                        model.add(tf.keras.layers.Dense(units=n_outputs))
-        
-                        # Train surrogate
-                        model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-                        mcp_save = tf.keras.callbacks.ModelCheckpoint(".mdl_wts.hdf5", save_best_only=True, monitor="val_loss", mode="min")
-                        history = model.fit(x=x, y=y, validation_split=0.2, verbose=1, epochs=epochs, callbacks=[mcp_save])
-        
-                        val_loss = history.history["val_loss"][-1]  # Get the final validation loss
-        
-                        # Check if this model has the best validation loss so far
-                        if val_loss < best_val_loss:
-                            best_val_loss = val_loss
-                            best_model = model
-        
-                            keras_surrogate = KerasSurrogate(
-                                best_model,
-                                input_labels=list(input_labels),
-                                output_labels=list(output_labels),
-                                input_bounds=input_bounds,
-                                input_scaler=input_scaler,
-                                output_scaler=output_scaler,
-                            )
-                            
-                            nn_path = os.path.join(data_dir, "keras_surrogate_high_rel")
-                            keras_surrogate.save_to_folder(nn_path)
+    t0 = time.time()
+    # Iterate over the parameter combinations
+    for activation in activations:
+        for optimizer in optimizers:
+            for n_hidden_layers in n_hidden_layers_values:
+                for n_nodes_per_layer in n_nodes_per_layer_values:
+                    model = tf.keras.Sequential()
+                    model.add(tf.keras.layers.Dense(units=n_nodes_per_layer, input_dim=n_inputs, activation=activation))
+                    for _ in range(1, n_hidden_layers):
+                        model.add(tf.keras.layers.Dense(units=n_nodes_per_layer, activation=activation))
+                    model.add(tf.keras.layers.Dense(units=n_outputs))
     
-    if compare_r2 == True:
-        
-        # Load the NN
-        nn_path = os.path.join(data_dir, "keras_surrogate_high_rel")
-        model = keras.models.load_model(nn_path)
+                    # Train surrogate
+                    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+                    mcp_save = tf.keras.callbacks.ModelCheckpoint(".mdl_wts.hdf5", save_best_only=True, monitor="val_loss", mode="min")
+                    history = model.fit(x=x, y=y, validation_split=0.2, verbose=1, epochs=epochs, callbacks=[mcp_save])
+    
+                    val_loss = history.history["val_loss"][-1]  # Get the final validation loss
+    
+                    # Check if this model has the best validation loss so far
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        best_model = model
+    
+                        keras_surrogate = KerasSurrogate(
+                            best_model,
+                            input_labels=list(input_labels),
+                            output_labels=list(output_labels),
+                            input_bounds=input_bounds,
+                            input_scaler=input_scaler,
+                            output_scaler=output_scaler,
+                        )
+                        
+                        keras_surrogate.save_to_folder(surrogate_fname)
+    t1 = time.time()
+    total_time = t1 - t0
+    print("Total time: ", total_time)
 
-        keras_surrogate = KerasSurrogate(
-            model,
-            input_labels=list(input_labels),
-            output_labels=list(output_labels),
-            input_bounds=input_bounds,
-            input_scaler=input_scaler,
-            output_scaler=output_scaler,
-        )
+def main():
+    
+    argparser = config.get_argparser()
 
-        # Load the ALAMO surrogate
-        alamo_surr_path = os.path.join(data_dir, alamo_surr)
-        alamo_surrogate = AlamoSurrogate.load_from_file(alamo_surr_path)
-        
-        data_validation = pd.read_csv(data_val_path) 
+    argparser.add_argument(
+        "--fname",
+        default=DEFAULT_DATA_FILE,
+        help="Base file name for training the neural network",
+    )
+    
+    argparser.add_argument(
+        "--surrogate_fname",
+        default=DEFAULT_SURR_NAME,
+        help="File name for the neural network",
+    )
+    
+    argparser.add_argument(
+        "--tune",
+        default="False",
+        help="If False, you just train with tanh, 4 layers, 30 neurons.",
+    )
+    
+    args = argparser.parse_args()
 
-        if 'Unnamed: 0' in data_validation.columns:
-            data_validation = data_validation.drop('Unnamed: 0', axis=1)
-
-        # Predict output data with NN and ALAMO
-        predicted_output_data_nn = KerasSurrogate.evaluate_surrogate(keras_surrogate, data_validation.iloc[:,:4])
-        predicted_output_data_alamo = AlamoSurrogate.evaluate_surrogate(alamo_surrogate, data_validation.iloc[:,:4])
-        
-        # Calculate R2 for NN and ALAMO parity plots
-        r2_nn = list()
-        r2_alamo = list()
-
-        for component in output_labels:
-            if component not in ['C4H10','O2']:
-                y_pred_nn = predicted_output_data_nn[component].values
-                y_true_nn = data_validation.iloc[:,4:][component].values
-                r2_nn.append(r2_score(y_true_nn,y_pred_nn))
-                y_pred_alamo = predicted_output_data_alamo[component].values
-                y_true_alamo = data_validation.iloc[:,4:][component].values
-                r2_alamo.append(r2_score(y_true_alamo,y_pred_alamo))
-        
-        r2_df = pd.DataFrame({'Component': output_labels, 'R2-ALAMO': r2_alamo, 'R2-NN': r2_nn})
-        r2_path = os.path.join(data_dir, "R2_values.csv")
-        r2_df.to_csv(r2_path)
+    surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
+    fname = os.path.join(args.data_dir, args.fname)
+    
+    gibbs_to_nn(fname=fname,
+                surrogate_fname = surrogate_fname,
+                tune = args.tune,
+                activation = "tanh",
+                layers = 4,
+                neurons = 30)
 
 if __name__ == "__main__":
-    create_nn_and_compare(fname = "data_atr.csv", 
-                          tune = False, 
-                          save_val = True,
-                          alamo_surr = 'alamo_surrogate_atr.json', 
-                          compare_r2 = True)
-
+    main()
 
 
 
