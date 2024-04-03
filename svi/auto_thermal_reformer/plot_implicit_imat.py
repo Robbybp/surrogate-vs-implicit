@@ -19,6 +19,7 @@
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
 
+import os
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -59,6 +60,8 @@ from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
 )
 
 from svi.external import add_external_function_libraries_to_environment
+import svi.auto_thermal_reformer.config as config
+
 
 def make_implicit(m):
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
@@ -156,6 +159,12 @@ def make_implicit(m):
 
 
 def main():
+    argparser = config.get_argparser()
+    argparser.add_argument("--fname", default="external-imat.pdf", help="Basename of plot")
+    argparser.add_argument("--show", action="store_true")
+    argparser.add_argument("--no-save", action="store_true")
+    args = argparser.parse_args()
+
     from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
     P = 160000.0
     X = 0.95
@@ -187,6 +196,7 @@ def main():
     from pyomo.contrib.incidence_analysis.config import IncidenceOrder
     from pyomo.util.subsystems import create_subsystem_block, TemporarySubsystemManager
     import matplotlib.pyplot as plt
+    plt.rcParams["font.size"] = 18
     bl = create_subsystem_block(external_cons, external_vars)
     with TemporarySubsystemManager(to_fix=list(bl.input_vars[:])):
         fig, ax = spy_dulmage_mendelsohn(
@@ -195,7 +205,17 @@ def main():
             highlight_coarse=False,
             spy_kwds=dict(markersize=3),
         )
-    plt.show()
+
+    ax.set_ylabel("Constraint coordinate")
+    ax.set_xlabel("Variable coordinate")
+    ax.xaxis.set_label_position("top")
+    fig.tight_layout()
+
+    if not args.no_save:
+        fpath = os.path.join(args.results_dir, args.fname)
+        fig.savefig(fpath, transparent=True)
+    if args.show:
+        plt.show()
 
 
 if __name__ == "__main__":
