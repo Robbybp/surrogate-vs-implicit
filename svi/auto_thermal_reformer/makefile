@@ -4,22 +4,24 @@ all: analysis, plots
 
 plots:
 	python plot_convergence.py \
-	    data/fullspace-sweep-cyipopt.csv \
+	    data/fullspace-sweep.csv \
 	    --feastol=1e-5 \
 	    --no-legend \
 	    --title="Full-space"
 	python plot_convergence.py \
-	    data/alamo-sweep-cyipopt.csv \
+	    data/alamo-sweep.csv \
 	    --validation-fpath=data/alamo-sweep-cyipopt-validation.csv \
 	    --feastol=1e-5 \
 	    --no-legend \
-	    --title="ALAMO surrgate"
+	    --title="ALAMO surrgate" \
+		--show-training-bounds
 	python plot_convergence.py \
 	    data/nn-sweep-full.csv \
 	    --validation-fpath=data/nn-sweep-full-validation.csv \
 	    --feastol=1e-5 \
 	    --no-legend \
-	    --title="Neural network surrgate"
+	    --title="Neural network surrgate" \
+		--show-training-bounds
 	python plot_convergence.py \
 	    data/implicit-sweep.csv \
 	    --validation-fpath=data/implicit-sweep-validation.csv \
