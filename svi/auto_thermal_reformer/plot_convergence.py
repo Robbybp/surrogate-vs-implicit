@@ -54,6 +54,7 @@ argparser.add_argument("--no-save", action="store_true", help="Flag to not save 
 argparser.add_argument("--plot-fname", default=None, help="Basename for plot file")
 argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude a legend")
 argparser.add_argument("--title", default=None, help="Plot title")
+argparser.add_argument("--show-training-bounds", action="store_true")
 
 
 def plot_convergence_reliability(
@@ -62,6 +63,7 @@ def plot_convergence_reliability(
     feastol=None,
     legend=True,
     title=None,
+    show_training_bounds=False,
 ):
     # To determine whether to plot as a "success", I want to check:
     # - sweep["Termination"]
@@ -93,7 +95,7 @@ def plot_convergence_reliability(
             "success": success,
         }
     )
-
+#
     # Re-shape the "flattened" table of instances into a structured X-P grid
     pivoting = pd.pivot_table(
         df_for_plotting,
@@ -106,7 +108,7 @@ def plot_convergence_reliability(
     FONTSIZE = 28
     plt.rcParams["font.size"] = FONTSIZE
     if legend:
-        fig = plt.figure(figsize=(10, 7))
+        fig = plt.figure(figsize=(10.8, 7))
     else:
         fig = plt.figure(figsize=(7, 7))
         #fig = plt.figure()
@@ -151,10 +153,23 @@ def plot_convergence_reliability(
     ]
     ax.set_xticklabels(labels_pressure_plotting, rotation=0)
 
+    rectangle = plt.Rectangle(
+        (0.03, 6),
+        7.94,
+        1.97,
+        edgecolor='red',
+        facecolor="none",
+        linewidth=5,
+        linestyle=':',
+        label="Untrained region",
+    )
+    if show_training_bounds:
+        ax.add_patch(rectangle)
     if legend:
         legend_handles = [
             Patch(color="bisque", label="Successful"),
             Patch(color="black", label="Unsuccessful"),
+            rectangle,
         ]
         ax.legend(
             handles=legend_handles,
@@ -164,9 +179,6 @@ def plot_convergence_reliability(
             loc="upper left",
             borderaxespad=0,
         )
-    rectangle = plt.Rectangle((0.03, 6), 7.94, 1.97, edgecolor='red',
-                          facecolor="none", linewidth=3, linestyle=':')
-    ax.add_patch(rectangle)
     plt.gca().invert_yaxis()
     fig.tight_layout()
     return fig, ax
@@ -187,6 +199,7 @@ if __name__ == "__main__":
         feastol=args.feastol,
         legend=not args.no_legend,
         title=args.title,
+        show_training_bounds=args.show_training_bounds,
     )
 
     if not args.no_save:
