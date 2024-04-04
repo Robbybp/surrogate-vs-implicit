@@ -135,6 +135,7 @@ def gibbs_to_nn(
                         )
                         
                         keras_surrogate.save_to_folder(surrogate_fname)
+                        print(f"Saved NN surrogate model to {surrogate_fname}")
     t1 = time.time()
     total_time = t1 - t0
     print("Total time: ", total_time)
