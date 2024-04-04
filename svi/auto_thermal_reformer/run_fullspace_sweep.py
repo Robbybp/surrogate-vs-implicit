@@ -46,13 +46,13 @@ def main(X,P):
     solver = config.get_optimization_solver()
     timer = TicTocTimer()
     timer.tic("starting timer")
-    print(f"Solving sample {i} with X={X}, P={P}")
+    print(f"Solving sample with X={X}, P={P}")
     results = solver.solve(m, tee=True)
     dT = timer.toc("end timer")
     df[list(df.keys())[0]].append(X)
     df[list(df.keys())[1]].append(P)
     df[list(df.keys())[2]].append(results.solver.termination_condition)
-    if pyo.check_optimal_termination(results.solver.termination_condition):
+    if pyo.check_optimal_termination(results):
         df[list(df.keys())[3]].append(dT)
         df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
         df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
