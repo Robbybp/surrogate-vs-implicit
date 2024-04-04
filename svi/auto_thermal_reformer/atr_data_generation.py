@@ -33,12 +33,15 @@ from pyomo.environ import (
 
 from idaes.core import FlowsheetBlock
 from pyomo.network import Arc
+from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from idaes.core.util.initialization import propagate_state
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.models.unit_models import GibbsReactor, Mixer
 from idaes.core.solvers import get_solver
 from idaes.models_extra.power_generation.properties.natural_gas_PR import get_prop
+
 from svi.auto_thermal_reformer.reactor_model import create_instance
+import svi.auto_thermal_reformer.config as config
 
 import time
 
@@ -46,6 +49,9 @@ import time
 
 # Inputs: Fin_CH4 [mol/s],Tin_CH4 [K],Fin_H2O [mol/s],Conversion
 # Outputs: HeatDuty [W],Fout [mol/s],Tout[K],'H2','CO','H2O','CO2','CH4','C2H6','C3H8','C4H10','N2','O2','Ar'
+
+argparser = config.get_argparser()
+argparser.add_argument("--fname", default="training-data.csv", help="Basename for data file for surrogate training")
 
 def atr_data_gen(num_samples = 600):
     df = {'Fin_CH4':[], 'Tin_CH4':[], 'Fin_H2O':[], 'Conversion': [], 'HeatDuty':[], 'Fout':[], 'Tout':[], 'H2':[], 
@@ -72,6 +78,10 @@ def atr_data_gen(num_samples = 600):
                 "tol": 1e-8,
                 "max_iter": 400
             }
+            #scc_solver = pyo.SolverFactory("ipopt")
+            #solve_strongly_connected_components(
+            #    m, solver=scc_solver, use_calc_var=False
+            #)
             solver.solve(m, tee=True)
 
             df[list(df.keys())[0]].append(flow_mol_gas)
@@ -101,8 +111,10 @@ def atr_data_gen(num_samples = 600):
     t_generate_samples = time.time() - t_start
     print(f"Time to sample inputs and generate data: {t_generate_samples}")
     df = pd.DataFrame(df)
-    df.to_csv('data_atr.csv')
     return df
 
 if __name__ == "__main__":
+    args = argparser.parse_args()
     df = atr_data_gen(num_samples = 600)
+    fpath = os.path.join(args.data_dir, args.fname)
+    df.to_csv(fpath)
