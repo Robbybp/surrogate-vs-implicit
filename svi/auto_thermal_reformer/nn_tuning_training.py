@@ -39,14 +39,15 @@ tf.keras.backend.set_floatx('float64')
 DEFAULT_DATA_FILE = "data_atr.csv"
 DEFAULT_SURR_NAME = "keras_surrogate_high_rel"
 
-def gibbs_to_nn(fname, 
-                surrogate_fname,
-                tune,
-                activation,
-                layers,
-                neurons):
 
-    data = pd.read_csv(fname) 
+def gibbs_to_nn(
+    data, 
+    surrogate_fname,
+    tune,
+    activation,
+    layers,
+    neurons,
+):
 
     if 'Unnamed: 0' in data.columns:
         data = data.drop('Unnamed: 0', axis=1)
@@ -72,7 +73,7 @@ def gibbs_to_nn(fname,
     n_hidden_layers_values = np.arange(2,5,1).tolist()
     n_nodes_per_layer_values = np.arange(20,31,1).tolist()
     
-    if tune == "False":
+    if not tune:
         activations = [activation]
         n_hidden_layers_values = [layers]
         n_nodes_per_layer_values = [neurons]
@@ -138,57 +139,42 @@ def gibbs_to_nn(fname,
     total_time = t1 - t0
     print("Total time: ", total_time)
 
+
 def main():
-    
+
     argparser = config.get_argparser()
 
     argparser.add_argument(
-        "--fname",
-        default=DEFAULT_DATA_FILE,
-        help="Base file name for training the neural network",
+        "fpath", help="Base file name for training the neural network",
     )
-    
+
     argparser.add_argument(
         "--surrogate_fname",
         default=DEFAULT_SURR_NAME,
         help="File name for the neural network",
     )
-    
+
     argparser.add_argument(
         "--tune",
-        default="False",
-        help="If False, you just train with tanh, 4 layers, 30 neurons.",
+        action="store_true",
+        help="If not set, you just train with tanh, 4 layers, 30 neurons.",
     )
-    
+
     args = argparser.parse_args()
 
     surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
-    fname = os.path.join(args.data_dir, args.fname)
-    
-    gibbs_to_nn(fname=fname,
-                surrogate_fname = surrogate_fname,
-                tune = args.tune,
-                activation = "tanh",
-                layers = 4,
-                neurons = 30)
+
+    data = pd.read_csv(args.fpath)
+
+    gibbs_to_nn(
+        data,
+        surrogate_fname=surrogate_fname,
+        tune=args.tune,
+        activation="tanh",
+        layers=4,
+        neurons=30,
+    )
+
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
