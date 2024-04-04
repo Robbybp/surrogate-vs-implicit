@@ -95,6 +95,7 @@ def main():
     argparser.add_argument(
         "--feastol",
         default=1e-5,
+        type=float,
         help="Tolerance used to check feasibility of parameters (default=1e-5)",
     )
     argparser.add_argument(

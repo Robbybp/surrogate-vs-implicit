@@ -18,9 +18,8 @@
 #
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
-import pandas as pd
-import numpy as np
-from pyomo.common.timing import TicTocTimer
+
+import os
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -54,7 +53,6 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
-from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
 from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
@@ -62,6 +60,8 @@ from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
 )
 
 from svi.external import add_external_function_libraries_to_environment
+import svi.auto_thermal_reformer.config as config
+
 
 def make_implicit(m):
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
@@ -157,52 +157,66 @@ def make_implicit(m):
 
     return m_implicit
 
-df = {'X':[], 'P':[], 'Termination':[], 'Time':[], 'Objective':[], 'Steam':[], 'Bypass Fraction':[], 'CH4 Feed':[]}
 
-def main(X,P):
+def main():
+    argparser = config.get_argparser()
+    argparser.add_argument("--fname", default="external-imat.pdf", help="Basename of plot")
+    argparser.add_argument("--show", action="store_true")
+    argparser.add_argument("--no-save", action="store_true")
+    args = argparser.parse_args()
+
     from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
-    m = make_optimization_model(X,P)
+    P = 160000.0
+    X = 0.95
+    m = make_optimization_model(X, P, initialize=False)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
-    solver = pyo.SolverFactory("cyipopt", options = {"tol": 1e-6, "max_iter": 100})
-    timer = TicTocTimer()
-    timer.tic("starting timer")
-    print(X,P)
-    results = solver.solve(m_implicit, tee=True)
-    dT = timer.toc("end timer")
-    df[list(df.keys())[0]].append(X)
-    df[list(df.keys())[1]].append(P)
-    df[list(df.keys())[2]].append(results.solver.termination_condition)
-    df[list(df.keys())[3]].append(dT)
-    df[list(df.keys())[4]].append(value(m.fs.product.mole_frac_comp[0,'H2']))
-    df[list(df.keys())[5]].append(value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-    df[list(df.keys())[6]].append(value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
-    df[list(df.keys())[7]].append(value(m.fs.feed.outlet.flow_mol[0]))
+
+    epm = m_implicit.egb.get_external_model()
+    external_vars = epm.external_vars
+    external_cons = epm.external_cons
+    from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+    from pyomo.contrib.incidence_analysis.interface import get_structural_incidence_matrix
+    igraph = IncidenceGraphInterface()
+    vblocks, cblocks = igraph.block_triangularize(external_vars, external_cons)
+    var_order = sum(vblocks, [])
+    con_order = sum(cblocks, [])
+
+    for i, (vb, cb) in enumerate(zip(vblocks, cblocks)):
+        print(f"Block {i}")
+        print("---------")
+        print("Variables")
+        for var in vb:
+            print(f"  {var.name}")
+        print("Constraints")
+        for con in cb:
+            print(f"  {con.name}")
+
+    from pyomo.contrib.incidence_analysis.visualize import spy_dulmage_mendelsohn
+    from pyomo.contrib.incidence_analysis.config import IncidenceOrder
+    from pyomo.util.subsystems import create_subsystem_block, TemporarySubsystemManager
+    import matplotlib.pyplot as plt
+    plt.rcParams["font.size"] = 18
+    bl = create_subsystem_block(external_cons, external_vars)
+    with TemporarySubsystemManager(to_fix=list(bl.input_vars[:])):
+        fig, ax = spy_dulmage_mendelsohn(
+            bl,
+            order=IncidenceOrder.dulmage_mendelsohn_lower,
+            highlight_coarse=False,
+            spy_kwds=dict(markersize=3),
+        )
+
+    ax.set_ylabel("Constraint coordinate")
+    ax.set_xlabel("Variable coordinate")
+    ax.xaxis.set_label_position("top")
+    fig.tight_layout()
+
+    if not args.no_save:
+        fpath = os.path.join(args.results_dir, args.fname)
+        fig.savefig(fpath, transparent=True)
+    if args.show:
+        plt.show()
+
 
 if __name__ == "__main__":
-    for X in np.arange(0.90,0.98,0.01):
-        for P in np.arange(1447379,1947379,70000):
-            try:
-                main(X,P)
-            except PyNumeroEvaluationError:
-                df[list(df.keys())[0]].append(X)
-                df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append("AMPL Error")
-                df[list(df.keys())[3]].append(999)
-                df[list(df.keys())[4]].append(999)
-                df[list(df.keys())[5]].append(999)
-                df[list(df.keys())[6]].append(999)
-                df[list(df.keys())[7]].append(999)
-            except RuntimeError:
-                df[list(df.keys())[0]].append(X)
-                df[list(df.keys())[1]].append(P)
-                df[list(df.keys())[2]].append("AMPL Error")
-                df[list(df.keys())[3]].append(999)
-                df[list(df.keys())[4]].append(999)
-                df[list(df.keys())[5]].append(999)
-                df[list(df.keys())[6]].append(999)
-                df[list(df.keys())[7]].append(999)
-
-
-df = pd.DataFrame(df)
-df.to_csv("implicit_experiment.csv")
+    main()

@@ -21,6 +21,7 @@
 
 ######## IMPORT PACKAGES ########
 import os
+import math
 import pandas as pd
 import numpy as np
 from svi.auto_thermal_reformer.config import get_argparser
@@ -68,6 +69,11 @@ argparser.add_argument(
     type=float,
     help="Optional parameter to override 'Feasible' column with a relaxed tolerance",
 )
+argparser.add_argument(
+    "--subset",
+    default=None,
+    help="Comma-separated list of samples to analyze",
+)
 
 
 def analyze_results(
@@ -111,10 +117,16 @@ def analyze_results(
 
     subset_success = [i for i in success_rows if i in subset_set]
     solve_times = [data["Time"][i] for i in subset_success]
+    iter_counts = [data["Iterations"][i] for i in subset_success]
     ave_solve_time = sum(solve_times) / len(solve_times)
+    stdev_solve_time = math.sqrt(sum((t - ave_solve_time)**2 / len(solve_times) for t in solve_times))
+    ave_iter_count = sum(iter_counts) / len(iter_counts)
     print(f"Of the specified instances, {len(subset_success)} were successful")
     print(f"Of these, average solve time is {ave_solve_time} s")
     print(f"Of these, max solve time is {max(solve_times)} s")
+    print(f"The standard deviation of solve time is {stdev_solve_time}")
+    print(f"Of these, the average iteration count is {ave_iter_count}")
+    print(f"Of these, the max iteration count is {max(iter_counts)}")
     # median solve time?
 
     if validation_df is not None:
@@ -154,8 +166,15 @@ if __name__ == "__main__":
     else:
         validation_df = None
 
+    if args.subset is not None:
+        subs_str = args.subset.split(",")
+        subset = [int(row) for row in subs_str]
+    else:
+        subset = None
+
     analyze_results(
         experiment_df,
         validation_df=validation_df,
         feastol=args.feastol,
+        subset=subset,
     )
