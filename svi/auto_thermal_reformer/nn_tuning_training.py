@@ -71,7 +71,7 @@ def gibbs_to_nn(
     # Define the parameter values to try
     activations = ["sigmoid", "tanh"]
     n_hidden_layers_values = np.arange(2,5,1).tolist()
-    n_nodes_per_layer_values = np.arange(20,31,1).tolist()
+    n_nodes_per_layer_values = np.arange(20,33,1).tolist()
     
     if not tune:
         activations = [activation]
@@ -157,7 +157,7 @@ def main():
     argparser.add_argument(
         "--tune",
         action="store_true",
-        help="If not set, you just train with tanh, 4 layers, 30 neurons.",
+        help="If not set, you just train with tanh, 3 hidden layers, 32 neurons.",
     )
 
     args = argparser.parse_args()
@@ -171,8 +171,8 @@ def main():
         surrogate_fname=surrogate_fname,
         tune=args.tune,
         activation="tanh",
-        layers=4,
-        neurons=30,
+        layers=3,
+        neurons=32,
     )
 
 
