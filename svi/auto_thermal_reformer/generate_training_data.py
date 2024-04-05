@@ -67,10 +67,11 @@ def atr_data_gen(
     df = {'Fin_CH4':[], 'Tin_CH4':[], 'Fin_H2O':[], 'Conversion': [], 'HeatDuty':[], 'Fout':[], 'Tout':[], 'H2':[], 
       'CO':[], 'H2O':[], 'CO2':[], 'CH4':[], 'C2H6':[], 'C3H8':[], 'C4H10':[], 'N2':[], 'O2':[], 'Ar':[]}
 
+    # Inputs are in the order conversion, F_H2O, F_CH4, T
+    input_ranges = [(0.8, 0.95), (200.0, 350.0), (600.0, 900.0), (600.0, 900.0)]
+
     if regular_samples:
         nsamples_per_input = round(600**(1 / 5))
-        # Inputs are in the order conversion, F_H2O, F_CH4, T
-        input_ranges = [(0.8, 0.95), (200.0, 350.0), (600.0, 900.0), (600.0, 900.0)]
         input_spacing = [(hi - lo) / nsamples_per_input for lo, hi in input_ranges]
         input_lists = [
             [lo + i * input_spacing[j] for i in range(nsamples_per_input + 1)]
