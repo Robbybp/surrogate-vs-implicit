@@ -54,6 +54,7 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+from pyomo.contrib.incidence_analysis.config import IncidenceMethod
 from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
@@ -68,8 +69,10 @@ import svi.auto_thermal_reformer.config as config
 def make_implicit(m, **kwds):
     timer = kwds.pop("timer", HierarchicalTimer())
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
-    full_igraph = IncidenceGraphInterface(m)
-    reformer_igraph = IncidenceGraphInterface(m.fs.reformer, include_inequality=False)
+    full_igraph = IncidenceGraphInterface(m, method=IncidenceMethod.ampl_repn)
+    reformer_igraph = IncidenceGraphInterface(
+        m.fs.reformer, include_inequality=False, method=IncidenceMethod.ampl_repn
+    )
 
     # Pressure is not an "external variable" (it is fixed), so the pressure
     # linking equation doesn't need to be included as "residual"
@@ -166,12 +169,16 @@ def make_implicit(m, **kwds):
 if __name__ == "__main__":
     X = 0.95
     P = 1550000.0
-    m = make_optimization_model(X,P)
-    add_external_function_libraries_to_environment(m)
     htimer = HierarchicalTimer()
+    htimer.start("make-model")
+    m = make_optimization_model(X,P)
+    htimer.stop("make-model")
+    add_external_function_libraries_to_environment(m)
     timer = TicTocTimer()
     timer.tic()
+    htimer.start("make-implicit")
     m_implicit = make_implicit(m, timer=htimer)
+    htimer.stop("make-implicit")
     timer.toc("made model")
     solver = config.get_optimization_solver()
     print(X,P)
