@@ -22,20 +22,35 @@ import os
 import argparse
 import itertools
 import pyomo.environ as pyo
+from svi.cyipopt import TimedPyomoCyIpoptSolver, Callback
 
 
 filedir = os.path.dirname(__file__)
 
 
 PARAM_SWEEP_KEYS = [
-    'X', 'P', 'Termination', 'Time', 'Objective', 'Steam', 'Bypass Frac', 'CH4 Feed'
+    'X',
+    'P',
+    'Termination',
+    'Iterations',
+    'Time',
+    'function-time',
+    'jacobian-time',
+    'hessian-time',
+    'Objective',
+    'Steam',
+    'Bypass Frac',
+    'CH4 Feed',
 ]
 
 
 def get_optimization_solver(options=None):
     # Use cyipopt for everything for Ipopt version consistency among all
     # formulations
-    solver = pyo.SolverFactory("cyipopt")
+    #solver = pyo.SolverFactory("cyipopt")
+    # This is a very simple callback we just use to get iteration counts.
+    cb = Callback()
+    solver = TimedPyomoCyIpoptSolver(intermediate_callback=cb)
     if options is None:
         options = {}
     solver.config.options["max_iter"] = 300
@@ -101,7 +116,7 @@ def get_parameter_samples(args):
     p_lo = 1447379.0
     #p_hi = 1947379.0
     p_hi = 1937379.0
-    
+
     n_x = args.n1
     n_p = args.n2
     dx = (x_hi - x_lo) / (n_x - 1)

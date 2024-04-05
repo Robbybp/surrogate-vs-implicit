@@ -21,7 +21,7 @@
 
 import os
 import pyomo.environ as pyo
-from pyomo.common.timing import TicTocTimer
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
 from svi.auto_thermal_reformer.fullspace_flowsheet import (
     make_optimization_model,
@@ -44,25 +44,35 @@ def main(X,P):
     # For instance 13 in the param sweep, these options give a quite interesting local
     # solution.
     solver = config.get_optimization_solver()
+    intermediate_cb = solver.config.intermediate_callback
+    htimer = HierarchicalTimer()
     timer = TicTocTimer()
     timer.tic("starting timer")
     print(f"Solving sample with X={X}, P={P}")
-    results = solver.solve(m, tee=True)
+    results = solver.solve(m, tee=True, timer=htimer)
     dT = timer.toc("end timer")
+    f_eval_time = htimer.timers["solve"].timers["function"].total_time
+    j_eval_time = htimer.timers["solve"].timers["jacobian"].total_time
+    h_eval_time = htimer.timers["solve"].timers["hessian"].total_time
     df[list(df.keys())[0]].append(X)
     df[list(df.keys())[1]].append(P)
     df[list(df.keys())[2]].append(results.solver.termination_condition)
     if pyo.check_optimal_termination(results):
-        df[list(df.keys())[3]].append(dT)
-        df[list(df.keys())[4]].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
-        df[list(df.keys())[5]].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
-        df[list(df.keys())[6]].append(pyo.value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
-        df[list(df.keys())[7]].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+        df["Time"].append(dT)
+        df["Objective"].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
+        df["Steam"].append(pyo.value(m.fs.reformer_mix.steam_inlet.flow_mol[0]))
+        df["Bypass Frac"].append(pyo.value(m.fs.reformer_bypass.split_fraction[0,'bypass_outlet']))
+        df["CH4 Feed"].append(pyo.value(m.fs.feed.outlet.flow_mol[0]))
+        df["Iterations"].append(len(intermediate_cb.iterate_data))
+        df["function-time"].append(f_eval_time)
+        df["jacobian-time"].append(j_eval_time)
+        df["hessian-time"].append(h_eval_time)
     else:
         # If the solver didn't converge, we don't care about the solve time,
         # the objective, or any of the degree of freedom values.
-        for i in range(3, 8):
-            df[config.PARAM_SWEEP_KEYS[i]].append(INVALID)
+        for key in config.PARAM_SWEEP_KEYS:
+            if key not in ("X", "P", "Termination"):
+                df[key].append(INVALID)
 
 
 if __name__ == "__main__":
@@ -82,32 +92,26 @@ if __name__ == "__main__":
         try:
             main(X,P)
         except AssertionError:
-             df[list(df.keys())[0]].append(X)
-             df[list(df.keys())[1]].append(P)
-             df[list(df.keys())[2]].append(INVALID)
-             df[list(df.keys())[3]].append(INVALID)
-             df[list(df.keys())[4]].append(INVALID)
-             df[list(df.keys())[5]].append(INVALID)
-             df[list(df.keys())[6]].append(INVALID)
-             df[list(df.keys())[7]].append(INVALID)
+            df[list(df.keys())[0]].append(X)
+            df[list(df.keys())[1]].append(P)
+            df[list(df.keys())[2]].append("AssertionError")
+            for key in config.PARAM_SWEEP_KEYS:
+                if key not in ("X", "P", "Termination"):
+                    df[key].append(INVALID)
         except OverflowError:
-             df[list(df.keys())[0]].append(X)
-             df[list(df.keys())[1]].append(P)
-             df[list(df.keys())[2]].append("Overflow Error")
-             df[list(df.keys())[3]].append(INVALID)
-             df[list(df.keys())[4]].append(INVALID)
-             df[list(df.keys())[5]].append(INVALID)
-             df[list(df.keys())[6]].append(INVALID)
-             df[list(df.keys())[7]].append(INVALID)
+            df[list(df.keys())[0]].append(X)
+            df[list(df.keys())[1]].append(P)
+            df[list(df.keys())[2]].append("OverflowError")
+            for key in config.PARAM_SWEEP_KEYS:
+                if key not in ("X", "P", "Termination"):
+                    df[key].append(INVALID)
         except RuntimeError:
-             df[list(df.keys())[0]].append(X)
-             df[list(df.keys())[1]].append(P)
-             df[list(df.keys())[2]].append("Runtime Error")
-             df[list(df.keys())[3]].append(INVALID)
-             df[list(df.keys())[4]].append(INVALID)
-             df[list(df.keys())[5]].append(INVALID)
-             df[list(df.keys())[6]].append(INVALID)
-             df[list(df.keys())[7]].append(INVALID)
+            df[list(df.keys())[0]].append(X)
+            df[list(df.keys())[1]].append(P)
+            df[list(df.keys())[2]].append("RuntimeError")
+            for key in config.PARAM_SWEEP_KEYS:
+                if key not in ("X", "P", "Termination"):
+                    df[key].append(INVALID)
    
     df = pd.DataFrame(df)
     print(df)

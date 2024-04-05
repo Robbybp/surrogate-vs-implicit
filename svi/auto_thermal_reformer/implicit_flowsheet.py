@@ -18,7 +18,9 @@
 #
 #  This software is distributed under the 3-clause BSD license.
 #  ___________________________________________________________________________
-
+import pandas as pd
+import numpy as np
+from pyomo.common.timing import TicTocTimer, HierarchicalTimer
 import pyomo.environ as pyo
 from pyomo.environ import (
     Constraint,
@@ -52,6 +54,7 @@ from idaes.core.solvers import get_solver
 from idaes.models.unit_models.pressure_changer import ThermodynamicAssumption
 from idaes.models.unit_models.heat_exchanger import delta_temperature_underwood_callback
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
+from pyomo.contrib.pynumero.exceptions import PyNumeroEvaluationError
 from pyomo.contrib.pynumero.interfaces.external_pyomo_model import ExternalPyomoModel
 from pyomo.contrib.pynumero.interfaces.external_grey_box import ExternalGreyBoxBlock
 from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
@@ -59,8 +62,11 @@ from pyomo.contrib.pynumero.algorithms.solvers.implicit_functions import (
 )
 
 from svi.external import add_external_function_libraries_to_environment
+from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
+import svi.auto_thermal_reformer.config as config
 
-def make_implicit(m):
+def make_implicit(m, **kwds):
+    timer = kwds.pop("timer", HierarchicalTimer())
     ########### CREATE EXTERNAL PYOMO MODEL FOR THE AUTOTHERMAL REFORMER ###########
     full_igraph = IncidenceGraphInterface(m)
     reformer_igraph = IncidenceGraphInterface(m.fs.reformer, include_inequality=False)
@@ -130,6 +136,8 @@ def make_implicit(m):
         external_vars,
         residual_eqns,
         external_eqns,
+        timer=timer,
+        solver_options=dict(use_calc_var=False),
     )
 
     ########### CONNECT FLOWSHEET TO THE IMPLICIT AUTOTHERMAL REFORMER ###########
@@ -155,48 +163,21 @@ def make_implicit(m):
     return m_implicit
 
 
-def main():
-    from svi.auto_thermal_reformer.fullspace_flowsheet import make_optimization_model
-    P = 160000.0
-    X = 0.95
-    m = make_optimization_model(X, P, initialize=False)
-    add_external_function_libraries_to_environment(m)
-    m_implicit = make_implicit(m)
-
-    epm = m_implicit.egb.get_external_model()
-    external_vars = epm.external_vars
-    external_cons = epm.external_cons
-    from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
-    from pyomo.contrib.incidence_analysis.interface import get_structural_incidence_matrix
-    igraph = IncidenceGraphInterface()
-    vblocks, cblocks = igraph.block_triangularize(external_vars, external_cons)
-    var_order = sum(vblocks, [])
-    con_order = sum(cblocks, [])
-
-    for i, (vb, cb) in enumerate(zip(vblocks, cblocks)):
-        print(f"Block {i}")
-        print("---------")
-        print("Variables")
-        for var in vb:
-            print(f"  {var.name}")
-        print("Constraints")
-        for con in cb:
-            print(f"  {con.name}")
-
-    from pyomo.contrib.incidence_analysis.visualize import spy_dulmage_mendelsohn
-    from pyomo.contrib.incidence_analysis.config import IncidenceOrder
-    from pyomo.util.subsystems import create_subsystem_block, TemporarySubsystemManager
-    import matplotlib.pyplot as plt
-    bl = create_subsystem_block(external_cons, external_vars)
-    with TemporarySubsystemManager(to_fix=list(bl.input_vars[:])):
-        fig, ax = spy_dulmage_mendelsohn(
-            bl,
-            order=IncidenceOrder.dulmage_mendelsohn_lower,
-            highlight_coarse=False,
-            spy_kwds=dict(markersize=3),
-        )
-    plt.show()
-
-
 if __name__ == "__main__":
-    main()
+    X = 0.95
+    P = 1550000.0
+    m = make_optimization_model(X,P)
+    add_external_function_libraries_to_environment(m)
+    htimer = HierarchicalTimer()
+    timer = TicTocTimer()
+    timer.tic()
+    m_implicit = make_implicit(m, timer=htimer)
+    timer.toc("made model")
+    solver = config.get_optimization_solver()
+    print(X,P)
+    htimer.start("solve")
+    results = solver.solve(m_implicit, tee=True)
+    htimer.stop("solve")
+    timer.toc("solved model")
+    dT = timer.toc("end timer")
+    print(htimer)
