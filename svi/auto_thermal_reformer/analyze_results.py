@@ -137,6 +137,8 @@ def analyze_results(
         baseline_success_rows = np.where(baseline_success == 1)[0]
         subset_baseline_success = [i for i in baseline_success_rows if i in subset_set]
         obj_errors = [validation_df["objective-error"][i] for i in subset_baseline_success]
+        abs_obj_errors = [abs(validation_df["objective-error"][i]) for i in subset_baseline_success]
+        ave_abs_obj_error = sum(abs_obj_errors) / len(abs_obj_errors)
         ave_obj_error = sum(obj_errors) / len(obj_errors)
         print(
             "Of the specified instances, the baseline was successful in"
@@ -145,6 +147,10 @@ def analyze_results(
         print(
             "Of these, the average relative objective difference,"
             f" (experiment - baseline) / baseline, is {ave_obj_error}"
+        )
+        print(
+            "Of these, the average absolute relative objective difference,"
+            f" |(experiment - baseline) / baseline|, is {ave_abs_obj_error}"
         )
         print(
             "Of these, the max relative objective difference,"
