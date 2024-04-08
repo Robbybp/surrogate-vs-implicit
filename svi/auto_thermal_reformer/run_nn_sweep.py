@@ -92,7 +92,8 @@ def main():
 
     xp_samples = config.get_parameter_samples(args)
 
-    for X, P in xp_samples:
+    for i, (X, P) in enumerate(xp_samples):
+        print(f"Running sample {i} with X={X}, P={P}")
         try: 
             m = create_instance(X, P, surrogate_fname=surrogate_fname, formulation=formulation)
             initialize_nn_atr_flowsheet(m)
@@ -104,6 +105,7 @@ def main():
             htimer = HierarchicalTimer()
             timer = TicTocTimer()
             timer.tic('starting timer')
+            print(f"Solving sample {i} with X={X}, P={P}")
             results = solver.solve(m, tee=True, timer=htimer)
             dT = timer.toc('end')
             f_eval_time = htimer.timers["solve"].timers["function"].total_time

@@ -23,14 +23,27 @@
 
 import os
 import pandas as pd
+from pyomo.common.timing import TicTocTimer
 from idaes.core.surrogate.sampling.data_utils import split_training_validation
 from idaes.core.surrogate.alamopy import AlamoTrainer, AlamoSurrogate
 from idaes.core.surrogate.plotting.sm_plotter import surrogate_parity
+import svi.auto_thermal_reformer.config as config
 
 ######## FUNCTION TO GENERATE ALAMO SURROGATES ########
 
-def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
-    df = pd.read_csv(file_path) # load data generated from atr_data_generation.py
+DEFAULT_DATA_FILE = "data_atr.csv"
+DEFAULT_SURR_NAME = "alamo_surrogate_atr.json"
+TRAIN_PLOT_NAME = "parity_train_atr.pdf"
+VAL_PLOT_NAME = "parity_val_atr.pdf"
+
+def gibbs_to_alamo(
+    df,
+    surrogate_fname,
+    train_plot,
+    val_plot,
+    show_surrogates = False, 
+    create_plots = False,
+):
     if 'Unnamed: 0' in df.columns:
         df = df.drop('Unnamed: 0', axis=1)
 
@@ -42,21 +55,25 @@ def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
     output_labels = output_data.columns
 
     n_data = df[input_labels[0]].size
+    timer = TicTocTimer()
+    timer.tic()
+
     data_training, data_validation = split_training_validation(df, 0.8, seed=n_data)
+    timer.toc("split data")
 
     trainer = AlamoTrainer(
         input_labels=input_labels,
         output_labels=output_labels,
         training_dataframe=data_training,
     )
+    timer.toc("build AlamoTrainer")
 
     trainer.config.constant = True
     trainer.config.linfcns = True
-    trainer.config.monomialpower = [2,3] # keep surrogate models as simple as possible, as long as parity plots show good correlations
+    trainer.config.monomialpower = [2,3]
 
     _, alm_surr, _ = trainer.train_surrogate()
-
-    alm_surr.save_to_file("alamo_surrogate_atr.json", overwrite=True)
+    timer.toc("Train surrogate")
 
     surrogate_expressions = trainer._results["Model"]
 
@@ -74,20 +91,55 @@ def gibbs_to_alamo(file_path, show_surrogates = False, create_plots = False):
         surrogate_expressions, input_labels, output_labels, input_bounds
     )
 
-    if create_plots == True:
-        surrogate_parity(alm_surr, data_training, filename='parity_train_atr.pdf')
-        surrogate_parity(alm_surr, data_validation, filename='parity_val_atr.pdf')
+    surrogate_parity(alm_surr, data_training, filename=train_plot, show = False)
+    surrogate_parity(alm_surr, data_validation, filename=val_plot, show = False)
 
-    file_dir = os.path.dirname(__file__)
-    fname_surrogates = os.path.join(file_dir, 'alamo_surrogate_atr.json')
-    fname_train_plot = os.path.join(file_dir, 'parity_train_atr.pdf')
-    fname_val_plot = os.path.join(file_dir, 'parity_val_atr.pdf')   
+    return alm_surr
+
+def main():
     
-    return fname_surrogates, fname_train_plot, fname_val_plot
+    argparser = config.get_argparser()
+
+    argparser.add_argument(
+        "fpath", help="Base file name for training the ALAMO surrogate (required)",
+    )
+
+    argparser.add_argument(
+        "--surrogate_fname",
+        default=DEFAULT_SURR_NAME,
+        help="File name for the ALAMO surrogate",
+    )
+
+    argparser.add_argument(
+        "--train_plot",
+        default=TRAIN_PLOT_NAME,
+        help="Base file name for training plot",
+    )
+
+    argparser.add_argument(
+        "--val_plot",
+        default=VAL_PLOT_NAME,
+        help="Base file name validation plot",
+    )
+
+    args = argparser.parse_args()
+
+    surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
+    train_plot = os.path.join(args.results_dir, args.train_plot)
+    val_plot = os.path.join(args.results_dir, args.val_plot)
+
+    df = pd.read_csv(args.fpath)
+
+    surr = gibbs_to_alamo(
+        df,
+        surrogate_fname=surrogate_fname,
+        train_plot=train_plot,
+        val_plot=val_plot,
+        show_surrogates=False, 
+        create_plots=False,
+    )
+    surr.save_to_file(surrogate_fname, overwrite=True)
+
 
 if __name__ == "__main__":
-    dirname = os.path.dirname(__file__)
-    basename = "data_atr.csv"
-    fname = os.path.join(dirname, basename)
-    gibbs_to_alamo(file_path = fname, show_surrogates = False, create_plots = False)
-
+    main()
