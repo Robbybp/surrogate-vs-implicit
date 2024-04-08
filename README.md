@@ -25,7 +25,7 @@ If you use this code in your research, please cite the following:
 ```bibtex
 @inproceedings{bugosen2024focapd,
 author={Bugosen, Sergio I. and Laird, Carl D. and Parker, Robert B.},
-title={Chemical process flowsheet optimization with full space, surrogate, and implicit formulations of a {G}ibbs reactor},
+title={Process flowsheet optimization with surrogate and implicit formulations of a {G}ibbs reactor},
 booktitle={Foundations of Computer-Aided Process Design},
 note={Accepted},
 year={2024},
