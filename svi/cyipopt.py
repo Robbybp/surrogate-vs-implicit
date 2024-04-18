@@ -14,6 +14,8 @@ from pyomo.contrib.pynumero.algorithms.solvers.cyipopt_solver import (
 from pyomo.core.base import Block, Objective, minimize
 from pyomo.opt import SolverStatus, SolverResults, TerminationCondition, ProblemSense
 from pyomo.opt.results.solution import Solution
+import numpy as np
+from scipy import sparse
 
 pyomo_nlp = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_nlp")[0]
 pyomo_grey_box = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_grey_box_nlp")[
@@ -327,3 +329,46 @@ class Callback:
                 ls_trials,
             )
         )
+
+class ConditioningCallback:
+
+    def __init__(self):
+        self.iterate_data = []
+        self.condition_numbers = []
+
+    def __call__(
+        self,
+        nlp,
+        # Don't include this argument, for compatibility with current CyIpopt
+        # interface
+        #ipopt_problem,
+        alg_mod,
+        iter_count,
+        obj_value,
+        inf_pr,
+        inf_du,
+        mu,
+        d_norm,
+        regularization_size,
+        alpha_du,
+        alpha_pr,
+        ls_trials,
+    ):
+        self.iterate_data.append(
+            (
+                alg_mod,
+                iter_count,
+                obj_value,
+                inf_pr,
+                inf_du,
+                mu,
+                d_norm,
+                regularization_size,
+                alpha_du,
+                alpha_pr,
+                ls_trials,
+            )
+        )
+        jac = nlp.evaluate_jacobian()
+        cond = np.linalg.cond(jac.toarray())
+        self.condition_numbers.append(cond)
