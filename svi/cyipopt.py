@@ -372,3 +372,29 @@ class ConditioningCallback:
         jac = nlp.evaluate_jacobian()
         cond = np.linalg.cond(jac.toarray())
         self.condition_numbers.append(cond)
+
+def get_gradient_of_lagrangian(
+    nlp,
+    primal_lb_multipliers,
+    primal_ub_multipliers,
+):
+    # PyNumero NLPs contain constraint multipliers, but does not define a convention.
+    # We still need:
+    # - primal LB/UB multipliers
+    # We should not need slack multipliers (Ipopt should take care of this...)
+    grad_obj = nlp.evaluate_grad_objective()
+
+    # There is no way this works. We will probably need to separate equality and
+    # inequality multipliers.
+    jac = nlp.evaluate_jacobian()
+    duals = nlp.get_duals()
+    # Each constraint gradient times its multiplier
+    conjac_term = jac.transpose().dot(duals)
+
+    grad_lag = (
+        - grad_obj
+        - conjac_term
+        + primal_lb_multipliers
+        - primal_ub_multipliers
+    )
+    return grad_lag
