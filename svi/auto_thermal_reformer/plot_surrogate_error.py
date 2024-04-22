@@ -26,7 +26,12 @@ import seaborn as sns
 import svi.auto_thermal_reformer.config as config
 
 
-def plot_surrogate_error(df, legend=True, title=None, show_training_bounds=False):
+def plot_surrogate_error(
+    df,
+    legend=True,
+    title=None,
+    show_training_bounds=False,
+):
     fig = plt.figure()
 
     conversion_list = list(sorted(set(df["X"])))
@@ -69,12 +74,12 @@ def main(args):
             plot_fname = os.path.basename(args.error_fpath)
             data_ext = "." + plot_fname.split(".")[-1]
             ext_len = len(data_ext)
-            plot_fname = plot_fname[:-ext_len] + "-surrogate-error" + ".pdf"
+            plot_fname = plot_fname[:-ext_len] + ".pdf"
         else:
             plot_fname = args.plot_fname
 
         plot_fpath = os.path.join(args.results_dir, plot_fname)
-        fig.savefig(plot_fpath, transparent=True)
+        fig.savefig(plot_fpath, transparent=not args.opaque)
 
     if args.show:
         plt.show()

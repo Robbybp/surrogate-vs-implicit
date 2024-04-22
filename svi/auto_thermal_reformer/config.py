@@ -139,4 +139,5 @@ def get_plot_argparser():
     argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude a legend")
     argparser.add_argument("--title", default=None, help="Plot title")
     argparser.add_argument("--show-training-bounds", action="store_true")
+    argparser.add_argument("--opaque", action="store_true", help="Not transparent")
     return argparser
