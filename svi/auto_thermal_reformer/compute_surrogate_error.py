@@ -23,6 +23,7 @@ import pyomo.environ as pyo
 from pyomo.common.timing import TicTocTimer
 from pyomo.util.subsystems import TemporarySubsystemManager
 from pyomo.contrib.incidence_analysis import solve_strongly_connected_components
+from idaes.core.util.exceptions import InitializationError
 from svi.auto_thermal_reformer.reactor_model import create_instance
 
 
@@ -52,6 +53,7 @@ def compute_surrogate_error(model):
         timer.toc("solve-scc-surrogate")
         surrogate_res = scc_solver.solve(surrogate_copy)
     if not pyo.check_optimal_termination(surrogate_res):
+        print("WARNING: Surrogate model failed to simulate")
         raise ValueError("Surrogate reactor model failed to simulate")
 
     # If we have converged, these newly computed surrogate outputs should be
@@ -61,16 +63,28 @@ def compute_surrogate_error(model):
         key: var.value for key, var in surrogate_copy.output_vars_as_dict().items()
     }
 
-    fullspace_model = create_instance(
-        model.fs.reformer.conversion.value,
-        model.fs.reformer_mix.steam_inlet.flow_mol[0].value,
-        # Note that "reformer_outlet" here means "the outlet of the bypass splitter
-        # that goes to the reformer". The other outlet is called "bypass_outlet".
-        # The inlet is simply called "inlet".
-        model.fs.reformer_bypass.reformer_outlet.flow_mol[0].value,
-        model.fs.reformer_bypass.reformer_outlet.temperature[0].value,
-    )
-    timer.toc("create-instance-fullspace")
+    try:
+        fullspace_model = create_instance(
+            model.fs.reformer.conversion.value,
+            model.fs.reformer_mix.steam_inlet.flow_mol[0].value,
+            # Note that "reformer_outlet" here means "the outlet of the bypass splitter
+            # that goes to the reformer". The other outlet is called "bypass_outlet".
+            # The inlet is simply called "inlet".
+            model.fs.reformer_bypass.reformer_outlet.flow_mol[0].value,
+            model.fs.reformer_bypass.reformer_outlet.temperature[0].value,
+            initialize=True,
+        )
+        timer.toc("create-instance-fullspace")
+    except InitializationError:
+        print("WARNING: Full-space model failed to initialize. Trying to continue.")
+        fullspace_model = create_instance(
+            model.fs.reformer.conversion.value,
+            model.fs.reformer_mix.steam_inlet.flow_mol[0].value,
+            model.fs.reformer_bypass.reformer_outlet.flow_mol[0].value,
+            model.fs.reformer_bypass.reformer_outlet.temperature[0].value,
+            initialize=False,
+        )
+
     solve_strongly_connected_components(
         fullspace_model,
         solver=scc_solver,
@@ -85,7 +99,8 @@ def compute_surrogate_error(model):
         # write an empty row in the surrogate-error file.
         # But we don't want to count a failure for the surrogate if this
         # fails... this can be handled by the caller.
-        raise ValueError("Fullspace reactor model failed to simulate")
+        print("WARNING: Full-space model failed to simulate")
+        raise ValueError("Full-space reactor model failed to simulate")
 
     fullspace_output = {
         "Fout": fullspace_model.fs.reformer.outlet.flow_mol[0].value,
