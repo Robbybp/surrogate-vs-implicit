@@ -130,3 +130,13 @@ def get_parameter_samples(args):
         subset = [int(i) for i in subset]
         xp_samples = [xp_samples[i] for i in subset]
     return xp_samples
+
+def get_plot_argparser():
+    argparser = get_argparser()
+    argparser.add_argument("--show", action="store_true", help="Flag to show the plot")
+    argparser.add_argument("--no-save", action="store_true", help="Flag to not save the plot")
+    argparser.add_argument("--plot-fname", default=None, help="Basename for plot file")
+    argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude a legend")
+    argparser.add_argument("--title", default=None, help="Plot title")
+    argparser.add_argument("--show-training-bounds", action="store_true")
+    return argparser
