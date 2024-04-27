@@ -43,8 +43,7 @@ PARAM_SWEEP_KEYS = [
     'CH4 Feed',
 ]
 
-
-def get_optimization_solver(options=None):
+def get_optimization_solver(options=None, iters = 300):
     # Use cyipopt for everything for Ipopt version consistency among all
     # formulations
     #solver = pyo.SolverFactory("cyipopt")
@@ -53,7 +52,7 @@ def get_optimization_solver(options=None):
     solver = TimedPyomoCyIpoptSolver(intermediate_callback=cb)
     if options is None:
         options = {}
-    solver.config.options["max_iter"] = 300
+    solver.config.options["max_iter"] = iters 
     solver.config.options["linear_solver"] = "ma27"
     solver.config.options["tol"] = 1e-7
     solver.config.options["print_user_options"] = "yes"
