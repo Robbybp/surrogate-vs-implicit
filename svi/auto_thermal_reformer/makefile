@@ -62,3 +62,27 @@ plot:
 	    --validation-fpath=data/implicit-sweep-validation.csv \
 	    --feastol=1e-5 \
 	    --title="Implicit function"
+
+plot-error:
+	python plot_surrogate_error.py \
+		data/alamo-sweep-surrogate-error.csv \
+		--no-legend \
+		--opaque \
+		--title="ALAMO"
+	python plot_surrogate_error.py \
+		data/nn-sweep-full-surrogate-error.csv \
+		--opaque \
+		--title="Neural network"
+
+plot-error-png:
+	python plot_surrogate_error.py \
+		data/alamo-sweep-surrogate-error.csv \
+		--no-legend \
+		--opaque \
+		--title="ALAMO" \
+		--plot-fname=alamo-sweep-surrogate-error.png
+	python plot_surrogate_error.py \
+		data/nn-sweep-full-surrogate-error.csv \
+		--opaque \
+		--title="Neural network" \
+		--plot-fname=nn-sweep-full-surrogate-error.png

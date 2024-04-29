@@ -59,13 +59,14 @@ def plot_surrogate_error(
     ax = sns.heatmap(
         error_array,
         cbar=cbar,
+        vmin=0.0,
+        vmax=0.05,
         cbar_kws=cbar_kws,
         square=True,
         cmap="Reds",
     )
     # Change "background color" used for missing data (where either full-space
     # or surrogate model failed)
-    ax.set_facecolor("black")
 
     if legend:
         w, h = fig.get_size_inches()
@@ -76,7 +77,7 @@ def plot_surrogate_error(
             handles=legend_handles,
             #ncol=1,
             handlelength=0.75,
-            bbox_to_anchor=(2.4, 1.0),
+            bbox_to_anchor=(2.5, 1.0),
             #loc="upper right",
             #borderaxespad=0,
         )
@@ -91,6 +92,7 @@ def plot_surrogate_error(
     ax.set_ylabel("Conversion")
 
     plt.gca().invert_yaxis()
+    ax.set_facecolor("black")
 
     return fig, ax
 
