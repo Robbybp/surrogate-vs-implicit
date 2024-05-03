@@ -27,18 +27,21 @@ from svi.auto_thermal_reformer.fullspace_flowsheet import (
     make_optimization_model,
     make_simulation_model,
 )
+from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 import svi.auto_thermal_reformer.config as config
 import pandas as pd
 import numpy as np
 
-
-df = {key: [] for key in config.PARAM_SWEEP_KEYS}
-
-
 INVALID = None
 
+def calculate_condition_number(m):
+    nlp = PyomoNLP(m)
+    jac = nlp.evaluate_jacobian()
+    cond_num = np.linalg.cond(jac.toarray())
+    return cond_num
 
-def main(X,P):
+def main(X,P, calc_condition_number = False):
+    
     m = make_optimization_model(X,P)
 
     # For instance 13 in the param sweep, these options give a quite interesting local
@@ -50,6 +53,10 @@ def main(X,P):
     timer.tic("starting timer")
     print(f"Solving sample with X={X}, P={P}")
     results = solver.solve(m, tee=True, timer=htimer)
+    if calc_condition_number:
+        cond_num = calculate_condition_number(m)
+    else:
+        cond_num = None
     dT = timer.toc("end timer")
     f_eval_time = htimer.timers["solve"].timers["function"].total_time
     j_eval_time = htimer.timers["solve"].timers["jacobian"].total_time
@@ -57,6 +64,8 @@ def main(X,P):
     df[list(df.keys())[0]].append(X)
     df[list(df.keys())[1]].append(P)
     df[list(df.keys())[2]].append(results.solver.termination_condition)
+    if new_key:
+        df[list(df.keys())[3]].append(cond_num)
     if pyo.check_optimal_termination(results):
         df["Time"].append(dT)
         df["Objective"].append(pyo.value(m.fs.product.mole_frac_comp[0,'H2']))
@@ -70,19 +79,37 @@ def main(X,P):
     else:
         # If the solver didn't converge, we don't care about the solve time,
         # the objective, or any of the degree of freedom values.
-        for key in config.PARAM_SWEEP_KEYS:
-            if key not in ("X", "P", "Termination"):
+        for key in df_keys:
+            if key not in ("X", "P", "Termination", "Condition Number"):
                 df[key].append(INVALID)
 
 
 if __name__ == "__main__":
+
     argparser = config.get_sweep_argparser()
+    
     argparser.add_argument(
         "--fname",
         default="fullspace-sweep.csv",
         help="Base file name for parameter sweep results"
     )
+    
+    argparser.add_argument(
+        "--calc_condition_number",
+        action="store_true",
+        help="Whether to calculate the condition number or not"
+    )    
+    
     args = argparser.parse_args()
+    
+    df = {key: [] for key in config.PARAM_SWEEP_KEYS}
+    index_to_insert = 3
+    new_key = "Condition Number" if args.calc_condition_number else None
+    df_keys = list(df.keys())
+    if new_key:
+        df_keys.insert(index_to_insert, new_key)
+    df = {key: [] for key in df_keys}
+    
     xp_samples = config.get_parameter_samples(args)
 
     fpath = os.path.join(args.data_dir, args.fname)
@@ -90,27 +117,27 @@ if __name__ == "__main__":
     for i, (X, P) in enumerate(xp_samples):
         print(f"Running sample {i} with X={X}, P={P}")
         try:
-            main(X,P)
+            main(X,P,args.calc_condition_number)
         except AssertionError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("AssertionError")
-            for key in config.PARAM_SWEEP_KEYS:
-                if key not in ("X", "P", "Termination"):
+            for key in df_keys:
+                if key not in ("X", "P", "Termination", "Condition Number"):
                     df[key].append(INVALID)
         except OverflowError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("OverflowError")
-            for key in config.PARAM_SWEEP_KEYS:
-                if key not in ("X", "P", "Termination"):
+            for key in df_keys:
+                if key not in ("X", "P", "Termination", "Condition Number"):
                     df[key].append(INVALID)
         except RuntimeError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("RuntimeError")
-            for key in config.PARAM_SWEEP_KEYS:
-                if key not in ("X", "P", "Termination"):
+            for key in df_keys:
+                if key not in ("X", "P", "Termination", "Condition Number"):
                     df[key].append(INVALID)
    
     df = pd.DataFrame(df)
