@@ -79,7 +79,7 @@ def main(X,P, calc_condition_number = False):
     else:
         # If the solver didn't converge, we don't care about the solve time,
         # the objective, or any of the degree of freedom values.
-        for key in df_keys:
+        for key in DF_KEYS:
             if key not in ("X", "P", "Termination", "Condition Number"):
                 df[key].append(INVALID)
 
@@ -105,10 +105,10 @@ if __name__ == "__main__":
     df = {key: [] for key in config.PARAM_SWEEP_KEYS}
     index_to_insert = 3
     new_key = "Condition Number" if args.calc_condition_number else None
-    df_keys = list(df.keys())
+    DF_KEYS = list(df.keys())
     if new_key:
-        df_keys.insert(index_to_insert, new_key)
-    df = {key: [] for key in df_keys}
+        DF_KEYS.insert(index_to_insert, new_key)
+    df = {key: [] for key in DF_KEYS}
 
     xp_samples = config.get_parameter_samples(args)
 
@@ -122,22 +122,22 @@ if __name__ == "__main__":
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("AssertionError")
-            for key in df_keys:
-                if key not in ("X", "P", "Termination", "Condition Number"):
+            for key in DF_KEYS:
+                if key not in ("X", "P", "Termination"):
                     df[key].append(INVALID)
         except OverflowError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("OverflowError")
-            for key in df_keys:
-                if key not in ("X", "P", "Termination", "Condition Number"):
+            for key in DF_KEYS:
+                if key not in ("X", "P", "Termination"):
                     df[key].append(INVALID)
         except RuntimeError:
             df[list(df.keys())[0]].append(X)
             df[list(df.keys())[1]].append(P)
             df[list(df.keys())[2]].append("RuntimeError")
-            for key in df_keys:
-                if key not in ("X", "P", "Termination", "Condition Number"):
+            for key in DF_KEYS:
+                if key not in ("X", "P", "Termination"):
                     df[key].append(INVALID)
    
     df = pd.DataFrame(df)
