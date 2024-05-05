@@ -97,11 +97,12 @@ def main(args):
             plot_fname = os.path.basename(args.cond_num_fpath)
             data_ext = "." + plot_fname.split(".")[-1]
             ext_len = len(data_ext)
-            plot_fname = plot_fname[:-ext_len] + ".pdf"
+            plot_fname = plot_fname[:-ext_len] + "-condition.pdf"
         else:
             plot_fname = args.plot_fname
 
         plot_fpath = os.path.join(args.results_dir, plot_fname)
+        print(f"Saving figure to {plot_fpath}")
         fig.savefig(plot_fpath, transparent=not args.opaque)
 
     if args.show:
