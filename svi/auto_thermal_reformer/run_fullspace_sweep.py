@@ -87,21 +87,21 @@ def main(X,P, calc_condition_number = False):
 if __name__ == "__main__":
 
     argparser = config.get_sweep_argparser()
-    
+
     argparser.add_argument(
         "--fname",
         default="fullspace-sweep.csv",
         help="Base file name for parameter sweep results"
     )
-    
+
     argparser.add_argument(
-        "--calc_condition_number",
+        "--calc-condition-number",
         action="store_true",
         help="Whether to calculate the condition number or not"
     )    
-    
+
     args = argparser.parse_args()
-    
+
     df = {key: [] for key in config.PARAM_SWEEP_KEYS}
     index_to_insert = 3
     new_key = "Condition Number" if args.calc_condition_number else None
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     if new_key:
         df_keys.insert(index_to_insert, new_key)
     df = {key: [] for key in df_keys}
-    
+
     xp_samples = config.get_parameter_samples(args)
 
     fpath = os.path.join(args.data_dir, args.fname)
