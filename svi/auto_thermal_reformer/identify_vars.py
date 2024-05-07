@@ -40,6 +40,7 @@ from pyomo.util.subsystems import create_subsystem_block
 from pyomo.contrib.incidence_analysis import IncidenceGraphInterface
 import svi.auto_thermal_reformer.config as config
 import numpy as np
+import argparse 
 
 # SUBSETS_FULLSPACE represents tuples (X,P,iters), where iters = number of iterations 
 # before the solve experiences a jump in the condition number.
@@ -47,26 +48,31 @@ import numpy as np
 
 SUBSETS_FULLSPACE = [
     (0.94, 1947379.0, 12),
-    #(0.90, 1727379.0, 12),
-    #(0.92, 1587379.0, 12),
-    #(0.93, 1657379.0, 12)
 ]
 
-def get_vars_related_to_block(m, block=524):
-    input_and_block_vars = {"Variable":[], "Value":[]}
+# We want to see what variable values are causing this jump in condition number. 
+# For this specific subset, jump in condition number occurs only in block 524. 
+
+def get_vars_related_to_blocks(m, blocks=[524]):
+    input_and_block_vars = []
     nlp = PyomoNLP(m)
     igraph = IncidenceGraphInterface(m, include_inequality=False)
     vblocks, cblocks = igraph.block_triangularize()
-    vblock = vblocks[block]
-    cblock = cblocks[block]
-    for con in cblock:
-        for var in identify_variables(con.expr):
-            if 'params' not in var.name:
-                input_and_block_vars["Variable"].append(var.name)
-                input_and_block_vars["Value"].append(var.value)
+    for block in blocks:
+        block_vars = {"Block": block, "Variable": [], "Value": []}
+        vblock = vblocks[block]
+        cblock = cblocks[block]
+        
+        for con in cblock:
+            for var in identify_variables(con.expr):
+                if 'params' not in var.name:
+                    block_vars["Variable"].append(var.name)
+                    block_vars["Value"].append(var.value)
+        
+        input_and_block_vars.append(block_vars)
     return input_and_block_vars
 
-def full(X=0.94, P=1947379.0, iters=300):
+def full_space(X=0.94, P=1947379.0, iters=300, blocks=[524]):
     m = make_optimization_model(X, P)
     solver = config.get_optimization_solver(iters=iters)
     print(f"Solving sample with X={X}, P={P}")
@@ -74,10 +80,10 @@ def full(X=0.94, P=1947379.0, iters=300):
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].value)
     m.fs.reformer_mix.steam_inlet.flow_mol.fix(m.fs.reformer_mix.steam_inlet.flow_mol[0].value)
     m.fs.feed.outlet.flow_mol.fix(m.fs.feed.outlet.flow_mol[0].value)
-    result = get_vars_related_to_block(m)
-    return result 
+    dicts = get_vars_related_to_blocks(m, blocks = blocks)
+    return dicts 
 
-def implicit(X=0.94, P=1947379.0, iters=300):
+def implicit(X=0.94, P=1947379.0, iters=300, blocks = [524]):
     m = make_optimization_model(X, P)
     add_external_function_libraries_to_environment(m)
     m_implicit = make_implicit(m)
@@ -87,15 +93,19 @@ def implicit(X=0.94, P=1947379.0, iters=300):
     m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].fix(m.fs.reformer_bypass.split_fraction[0, "bypass_outlet"].value)
     m.fs.reformer_mix.steam_inlet.flow_mol.fix(m.fs.reformer_mix.steam_inlet.flow_mol[0].value)
     m.fs.feed.outlet.flow_mol.fix(m.fs.feed.outlet.flow_mol[0].value)
-    cond_num = get_vars_related_to_block(m)
-    return cond_num
+    dicts = get_vars_related_to_blocks(m, blocks = blocks)
+    return dicts
 
-def variable_with_jump(dict1, dict2):
+# The function below is written under the premise that a jump in condition number is due to 
+# a significant jump in some variables values. The magnitude of this jump for each variable 
+# is unknown; percentage_diff argument can me modified according to the user's experience. 
+
+def variable_with_jump(dict1, dict2, percentage_diff = 10):
     variables_with_jump = {"Variable":[], "Value_initial":[], "Value_final":[]}
     for var, value1, value2 in zip(dict1["Variable"], dict1["Value"], dict2["Value"]):
         if value2 != value1:
             percentage_difference = abs((value2 - value1) / value1) * 100
-            if percentage_difference > 10:
+            if percentage_difference > percentage_diff:
                 variables_with_jump["Variable"].append(var)
                 variables_with_jump["Value_initial"].append(value1)
                 variables_with_jump["Value_final"].append(value2)
@@ -105,13 +115,29 @@ def dict_to_csv(data, filename):
     df = pd.DataFrame.from_dict(data)
     df.to_csv(filename, index=False)
 
-def main():
-    for i, (full_subset) in enumerate(zip(SUBSETS_FULLSPACE), 1):
-        before = implicit(X=full_subset[0][0], P=full_subset[0][1], iters=full_subset[0][2])
-        after = implicit(X=full_subset[0][0], P=full_subset[0][1], iters=full_subset[0][2]+1)
-    variables_with_jump = variable_with_jump(before, after)
-    dict_to_csv(variables_with_jump, 'vars_jump_more_than_10pt.csv')
-
+def main(blocks, percentage_diff, use_full_space, full_subsets):
+    for full_subset in full_subsets:
+        if use_full_space:
+            before_jump = full_space(X=full_subset[0], P=full_subset[1], iters=full_subset[2], blocks = blocks)
+            after_jump = full_space(X=full_subset[0], P=full_subset[1], iters=full_subset[2] + 1, blocks = blocks)
+        else:
+            before_jump = implicit(X=full_subset[0], P=full_subset[1], iters=full_subset[2], blocks = blocks)
+            after_jump = implicit(X=full_subset[0], P=full_subset[1], iters=full_subset[2] + 1, blocks = blocks)
+            
+        for before, after in zip(before_jump, after_jump):
+            block_number = before["Block"]
+            variables_with_jump = variable_with_jump(before, after, percentage_diff)
+            filename = f'vars_jump_more_than_{percentage_diff}pt_block_{block_number}.csv'
+            dict_to_csv(variables_with_jump, filename)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--blocks", nargs="+", type=int, default=[524], help="List of blocks")
+    parser.add_argument("--percentage_diff", type=float, default=10, help="Threshold for percentage difference")
+    parser.add_argument("--use_full_space", action="store_true", help="Use full_space function")
+    args = parser.parse_args()
+    
+    full_subsets = SUBSETS_FULLSPACE  
+    main(args.blocks, args.percentage_diff, args.use_full_space, full_subsets)
+
+
