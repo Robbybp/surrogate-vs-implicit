@@ -45,6 +45,7 @@ def add_reactor_model(
     flow_mol_h2o=300,
     flow_mol_gas=750,
     temp_gas=750,
+    initialize=True,
 ):
     """Add reactor unit model to provided Pyomo/IDAES model
 
@@ -134,7 +135,8 @@ def add_reactor_model(
     m.fs.reformer_mix.initialize()  
     propagate_state(arc=m.fs.connect)
 
-    m.fs.reformer.initialize()  
+    if initialize:
+        m.fs.reformer.initialize()  
 
     ######### SET REFORMER OUTLET PRESSURE #########
     m.fs.reformer.outlet.pressure[0].fix(137895)
@@ -158,6 +160,7 @@ def create_instance(
     flow_mol_h2o=300,
     flow_mol_gas=750,
     temp_gas=750,
+    initialize=True,
 ):
     # Set up global information
     m = ConcreteModel()
@@ -172,6 +175,7 @@ def create_instance(
         flow_mol_h2o=flow_mol_h2o,
         flow_mol_gas=flow_mol_gas,
         temp_gas=temp_gas,
+        initialize=initialize,
     )
 
     return m

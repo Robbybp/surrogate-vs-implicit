@@ -43,8 +43,7 @@ PARAM_SWEEP_KEYS = [
     'CH4 Feed',
 ]
 
-
-def get_optimization_solver(options=None):
+def get_optimization_solver(options=None, iters = 300):
     # Use cyipopt for everything for Ipopt version consistency among all
     # formulations
     #solver = pyo.SolverFactory("cyipopt")
@@ -53,7 +52,7 @@ def get_optimization_solver(options=None):
     solver = TimedPyomoCyIpoptSolver(intermediate_callback=cb)
     if options is None:
         options = {}
-    solver.config.options["max_iter"] = 300
+    solver.config.options["max_iter"] = iters 
     solver.config.options["linear_solver"] = "ma27"
     solver.config.options["tol"] = 1e-7
     solver.config.options["print_user_options"] = "yes"
@@ -130,3 +129,14 @@ def get_parameter_samples(args):
         subset = [int(i) for i in subset]
         xp_samples = [xp_samples[i] for i in subset]
     return xp_samples
+
+def get_plot_argparser():
+    argparser = get_argparser()
+    argparser.add_argument("--show", action="store_true", help="Flag to show the plot")
+    argparser.add_argument("--no-save", action="store_true", help="Flag to not save the plot")
+    argparser.add_argument("--plot-fname", default=None, help="Basename for plot file")
+    argparser.add_argument("--no-legend", action="store_true", help="Flag to exclude a legend")
+    argparser.add_argument("--title", default=None, help="Plot title")
+    argparser.add_argument("--show-training-bounds", action="store_true")
+    argparser.add_argument("--opaque", action="store_true", help="Not transparent")
+    return argparser

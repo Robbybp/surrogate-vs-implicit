@@ -14,6 +14,8 @@ from pyomo.contrib.pynumero.algorithms.solvers.cyipopt_solver import (
 from pyomo.core.base import Block, Objective, minimize
 from pyomo.opt import SolverStatus, SolverResults, TerminationCondition, ProblemSense
 from pyomo.opt.results.solution import Solution
+import numpy as np
+from scipy import sparse
 
 pyomo_nlp = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_nlp")[0]
 pyomo_grey_box = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_grey_box_nlp")[
@@ -327,3 +329,72 @@ class Callback:
                 ls_trials,
             )
         )
+
+class ConditioningCallback:
+
+    def __init__(self):
+        self.iterate_data = []
+        self.condition_numbers = []
+
+    def __call__(
+        self,
+        nlp,
+        # Don't include this argument, for compatibility with current CyIpopt
+        # interface
+        #ipopt_problem,
+        alg_mod,
+        iter_count,
+        obj_value,
+        inf_pr,
+        inf_du,
+        mu,
+        d_norm,
+        regularization_size,
+        alpha_du,
+        alpha_pr,
+        ls_trials,
+    ):
+        self.iterate_data.append(
+            (
+                alg_mod,
+                iter_count,
+                obj_value,
+                inf_pr,
+                inf_du,
+                mu,
+                d_norm,
+                regularization_size,
+                alpha_du,
+                alpha_pr,
+                ls_trials,
+            )
+        )
+        jac = nlp.evaluate_jacobian()
+        cond = np.linalg.cond(jac.toarray())
+        self.condition_numbers.append(cond)
+
+def get_gradient_of_lagrangian(
+    nlp,
+    primal_lb_multipliers,
+    primal_ub_multipliers,
+):
+    # PyNumero NLPs contain constraint multipliers, but does not define a convention.
+    # We still need:
+    # - primal LB/UB multipliers
+    # We should not need slack multipliers (Ipopt should take care of this...)
+    grad_obj = nlp.evaluate_grad_objective()
+
+    # There is no way this works. We will probably need to separate equality and
+    # inequality multipliers.
+    jac = nlp.evaluate_jacobian()
+    duals = nlp.get_duals()
+    # Each constraint gradient times its multiplier
+    conjac_term = jac.transpose().dot(duals)
+
+    grad_lag = (
+        - grad_obj
+        - conjac_term
+        + primal_lb_multipliers
+        - primal_ub_multipliers
+    )
+    return grad_lag
