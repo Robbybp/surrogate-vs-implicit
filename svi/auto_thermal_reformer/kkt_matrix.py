@@ -49,22 +49,19 @@ def gradient_of_lagrangian(m):
     # constraints. In this case, inequalities are represented as equality constraints with
     # slack variables "s". 
     # The gradient of the lagrangian = grad_obj - jac_eq^T y - jac_ineq^T z and should = 0 at 
-    # optimal solution.
+    # optimal solution. Are we sure about the sign convention here? revisit this.
     nlp = PyomoNLP(m)
-    gradient_obj = nlp.evaluate_grad_objective()
+    # Terms for the KKT matrix are:
+    hess_lag = nlp.evaluate_hessian_lag()
     eq_constraint_jac = nlp.evaluate_jacobian_eq()
-    ineq_constraint_jac = nlp.evaluate_jacobian_ineq()
-    eq_duals = nlp.get_duals_eq()
-    ineq_duals = nlp.get_duals_ineq()
-    #print(eq_duals)
-    jac_eqTy = eq_constraint_jac.transpose().dot(eq_duals)
-    jac_ineqTz = ineq_constraint_jac.transpose().dot(ineq_duals)
-    gradient_of_lagrangian = gradient_obj - jac_eqTy - jac_ineqTz
-    #hess_lag = nlp.evaluate_hessian_lag()
-    return gradient_of_lagrangian
+    ineq_constraint_jac_transpose = ineq_constraint_jac.transpose() 
+    eq_constraint_jac_transpose = eq_constraint_jac.transpose()
+    ineq_duals = nlp.get_duals_ineq() #convert this to a diagonal matrix, where diagonal contains duals
+    # Finally, H is a diagonal matrix containing the values for each inequality constraint, including variable bounds.
+    return hess_lag
 
 def main():
-    m = full_space(X=0.90, P=1447379.0, iters=300)
+    m = full_space(X=0.90, P=1447379.0, iters=30)
     print(np.round(gradient_of_lagrangian(m), decimals=2))
 
 if __name__ == "__main__":
