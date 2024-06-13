@@ -37,6 +37,7 @@ from idaes.core import FlowsheetBlock
 from idaes.models.properties.modular_properties import GenericParameterBlock
 from idaes.core.util.model_statistics import degrees_of_freedom
 
+import idaes
 from idaes.models.unit_models import (
     Mixer,
     Heater,
@@ -112,8 +113,12 @@ def make_implicit(m):
     # coefficients with values of zero were handled. This should be fixed in
     # recent Pyomo main, but we leave this explicit filtering in here as we
     # often run using the latest release.
-    to_exclude.add(m.fs.reformer.lagrange_mult[0, "N"])
-    to_exclude.add(m.fs.reformer.lagrange_mult[0, "Ar"])
+    #
+    # NOTE: As of IDAES v... (2.5 or so), these inert components don't exist in
+    # the model.
+    if (idaes.ver.package_version.major, idaes.ver.package_version.minor) < (2, 5):
+        to_exclude.add(m.fs.reformer.lagrange_mult[0, "N"])
+        to_exclude.add(m.fs.reformer.lagrange_mult[0, "Ar"])
     external_vars = [var for var in reformer_igraph.variables if var not in to_exclude]
 
     external_var_set = ComponentSet(external_vars)
