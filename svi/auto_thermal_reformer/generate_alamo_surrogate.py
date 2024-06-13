@@ -124,7 +124,7 @@ def main():
 
     args = argparser.parse_args()
 
-    surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
+    surrogate_fname = os.path.join(args.results_dir, args.surrogate_fname)
     train_plot = os.path.join(args.results_dir, args.train_plot)
     val_plot = os.path.join(args.results_dir, args.val_plot)
 
