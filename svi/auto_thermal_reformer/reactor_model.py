@@ -194,3 +194,29 @@ if __name__ == "__main__":
     solver.solve(m, tee=True)
     tol = 1e-5
     validate_solution(m, tolerance=tol)
+
+    print("Variables")
+    print("---------")
+    for var in igraph.variables:
+        print(var.name)
+    print()
+
+    print("Constraints")
+    print("-----------")
+    for con in igraph.constraints:
+        print(con.name)
+    print()
+
+    vblocks, cblocks = igraph.block_triangularize()
+    for i, (vb, cb) in enumerate(zip(vblocks, cblocks)):
+        print(f"Block {i}")
+        print(f"=========")
+        print("Variables")
+        print("---------")
+        for var in vb:
+            print(f"  {var.name}")
+        print("Constraints")
+        print("-----------")
+        for con in cb:
+            print(f"  {con.name}")
+        print()
