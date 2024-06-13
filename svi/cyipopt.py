@@ -16,6 +16,7 @@ from pyomo.opt import SolverStatus, SolverResults, TerminationCondition, Problem
 from pyomo.opt.results.solution import Solution
 import numpy as np
 from scipy import sparse
+from pyomo.contrib.incidence_analysis.triangularize import block_triangularize
 
 pyomo_nlp = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_nlp")[0]
 pyomo_grey_box = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_grey_box_nlp")[
@@ -372,6 +373,177 @@ class ConditioningCallback:
         jac = nlp.evaluate_jacobian()
         cond = np.linalg.cond(jac.toarray())
         self.condition_numbers.append(cond)
+
+
+def extract_submatrix(coo, rows, cols):
+    new_rows = []
+    new_cols = []
+    new_data = []
+    row_old2new = {r: i for i, r in enumerate(rows)}
+    col_old2new = {c: i for i, c in enumerate(cols)}
+    for r, c, d in zip(coo.row, coo.col, coo.data):
+        if r in row_old2new and c in col_old2new:
+            new_rows.append(row_old2new[r])
+            new_cols.append(col_old2new[c])
+            new_data.append(d)
+    new_coo = sparse.coo_matrix(
+        (new_data, (new_rows, new_cols)),
+        shape=(len(rows), len(cols)),
+    )
+    return new_coo
+
+
+class FullStateCallback:
+
+    def __init__(
+        self,
+        include_condition=False,
+        include_block_condition=False,
+        dof_varnames=None,
+    ):
+        # TODO: We really don't want to re-use any any of this data from
+        # solve to solve. We need to store it, somehow, so we can access
+        # if after the callback function. Probably just need an explicit
+        # method to clear the cached data? Or check the NLP and make sure
+        # we're not being called with different NLPs?
+        #
+        # TODO: Option to compute condition numbers?
+        self.iterate_data = {
+            "alg_mod": [],
+            "iter_count": [],
+            "obj_value": [],
+            "inf_pr": [],
+            "inf_du": [],
+            "mu": [],
+            "d_norm": [],
+            "regularization_size": [],
+            "alpha_du": [],
+            "alpha_pr": [],
+            "ls_trials": [],
+        }
+        self.primal_values = {}
+        self.primal_residuals = {}
+        # TODO: Dual variables/residuals?
+
+        self._cached_var_names = None
+        self._cached_con_names = None
+
+        if include_condition:
+            self.condition_numbers = []
+        else:
+            self.condition_numbers = None
+
+        # Don't initialize with an empty list as we don't know how many elements
+        # this list will need.
+        self._include_block_condition = include_block_condition
+        if self._include_block_condition:
+            if dof_varnames is None:
+                raise RuntimeError("Degrees of freedom must be provided")
+        self._dof_varnames = dof_varnames
+        self.block_coords = None
+        self.block_condition_numbers = None
+
+    def __call__(
+        self,
+        nlp,
+        ipopt_problem,
+        alg_mod,
+        iter_count,
+        obj_value,
+        inf_pr,
+        inf_du,
+        mu,
+        d_norm,
+        regularization_size,
+        alpha_du,
+        alpha_pr,
+        ls_trials,
+    ):
+        self.iterate_data["alg_mod"].append(alg_mod)
+        self.iterate_data["iter_count"].append(iter_count)
+        self.iterate_data["obj_value"].append(obj_value)
+        self.iterate_data["inf_pr"].append(inf_pr)
+        self.iterate_data["inf_du"].append(inf_du)
+        self.iterate_data["mu"].append(mu)
+        self.iterate_data["d_norm"].append(d_norm)
+        self.iterate_data["regularization_size"].append(regularization_size)
+        self.iterate_data["alpha_du"].append(alpha_du)
+        self.iterate_data["alpha_pr"].append(alpha_pr)
+        self.iterate_data["ls_trials"].append(ls_trials)
+
+        iterate = ipopt_problem.get_current_iterate(scaled=False)
+        # NOTE: I'm assuming that the Ipopt iterate vector has the same order as the NLP.
+        # I'm pretty sure I've verified this before...
+        primal_values = iterate["x"]
+        if self._cached_var_names is None:
+            #self._cached_var_names = [var.name for var in nlp.get_pyomo_variables()]
+            self._cached_var_names = nlp.primals_names()
+        if not self.primal_values:
+            # If we haven't initialized this dict with variable names
+            for name, value in zip(self._cached_var_names, primal_values):
+                self.primal_values[name] = [value]
+        else:
+            # We have initialized with variable names
+            for name, value in zip(self._cached_var_names, primal_values):
+                self.primal_values[name].append(value)
+
+        infeas = ipopt_problem.get_current_violations(scaled=False)
+        primal_residuals = infeas["g_violation"]
+        if self._cached_con_names is None:
+            #self._cached_con_names = [con.name for con in nlp.get_pyomo_constraints()]
+            self._cached_con_names = nlp.constraint_names()
+        if not self.primal_residuals:
+            for name, value in zip(self._cached_con_names, primal_residuals):
+                self.primal_residuals[name] = [value]
+        else:
+            for name, value in zip(self._cached_con_names, primal_residuals):
+                self.primal_residuals[name].append(value)
+
+        # TODO: Could also track multipliers and dual infeasibility. This could be
+        # useful.
+        if self.condition_numbers is not None:
+            jac = nlp.evaluate_jacobian()
+            cond = np.linalg.cond(jac.toarray())
+            self.condition_numbers.append(cond)
+
+        if self._include_block_condition:
+            dof_varnames = set(self._dof_varnames)
+            var_coords = [i for i, vname in enumerate(self._cached_var_names) if vname not in dof_varnames]
+            square_varnames = [vname for i, vname in enumerate(self._cached_var_names) if vname not in dof_varnames]
+            name_to_new_coord = {
+                vname: i
+                for i, vname in enumerate(square_varnames)
+                if vname not in dof_varnames
+            }
+            con_coords = list(range(nlp.n_eq_constraints()))
+            vcoord_set = set(var_coords)
+
+            jac = nlp.evaluate_jacobian_eq()
+
+            row = []
+            col = []
+            data = []
+            for r, c, val in zip(jac.row, jac.col, jac.data):
+                if c in vcoord_set:
+                    new_coord = name_to_new_coord[self._cached_var_names[c]]
+                    row.append(r)
+                    col.append(new_coord)
+                    data.append(val)
+            square_jac = sparse.coo_matrix((data, (row, col)), shape=(len(con_coords), len(var_coords)))
+            # Row and column blocks
+            rblocks, cblocks = block_triangularize(square_jac)
+            
+            if self.block_condition_numbers is None:
+                self.block_condition_numbers = {
+                    f"block-{i}-cond": []
+                    for i in range(len(rblocks)) if len(rblocks[i]) > 1
+                }
+            for i, (rb, cb) in enumerate(zip(rblocks, cblocks)):
+                if len(rb) > 1:
+                    submat = extract_submatrix(square_jac, rb, cb)
+                    cond = np.linalg.cond(submat.toarray())
+                    self.block_condition_numbers[f"block-{i}-cond"].append(cond)
+
 
 def get_gradient_of_lagrangian(
     nlp,

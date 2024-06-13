@@ -33,7 +33,17 @@ def main(args):
         xp_samples = config.get_parameter_samples(args)
         conversion, pressure = xp_samples[args.sample]
     m = config.CONSTRUCTOR_LOOKUP[args.model](conversion, pressure)
-    callback = FullStateCallback()
+
+    dof_varnames = [
+        "fs.reformer_bypass.split_fraction[0.0,bypass_outlet]",
+        "fs.reformer_mix.steam_inlet_state[0.0].flow_mol",
+        "fs.feed.properties[0.0].flow_mol",
+    ]
+    callback = FullStateCallback(
+        include_condition=args.include_condition,
+        include_block_condition=args.include_block_condition,
+        dof_varnames=dof_varnames,
+    )
     solver = config.get_optimization_solver(callback=callback)
 
     results = solver.solve(m, tee=True)
@@ -56,6 +66,11 @@ def main(args):
     assert len(iterate_data) == (
         len(callback.iterate_data) + len(callback.primal_values) + len(callback.primal_residuals)
     )
+
+    if args.include_condition:
+        iterate_data["condition-number"] = list(callback.condition_numbers)
+    if args.include_block_condition:
+        iterate_data.update(callback.block_condition_numbers)
 
     df = pd.DataFrame(iterate_data)
     if not args.no_save:
@@ -83,6 +98,14 @@ if __name__ == "__main__":
         default=None,
         type=int,
         help="Index of conversion/pressure parameter sample to use. Default is X=0.95, P=1.55 MPa",
+    )
+    argparser.add_argument(
+        "--include-condition",
+        action="store_true",
+    )
+    argparser.add_argument(
+        "--include-block-condition",
+        action="store_true",
     )
 
     args = argparser.parse_args()
