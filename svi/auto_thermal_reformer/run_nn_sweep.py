@@ -35,6 +35,7 @@ from svi.auto_thermal_reformer.nn_flowsheet import (
 )
 from idaes.core.surrogate.keras_surrogate import KerasSurrogate
 import svi.auto_thermal_reformer.config as config
+from svi.auto_thermal_reformer.compute_surrogate_error import compute_surrogate_error
 
 
 INVALID = None
@@ -70,6 +71,11 @@ def main():
             " Must be 'full' or 'reduced'."
         ),
     )
+    argparser.add_argument(
+        "--compute-surrogate-error",
+        action="store_true",
+        help="Compute surrogate error (at termination point) and write to a separate results file",
+    )
 
     args = argparser.parse_args()
 
@@ -77,11 +83,16 @@ def main():
 
     if args.fname is None:
         sweep_fname = f"nn-sweep-{args.formulation}.csv"
+    else:
+        sweep_fname = args.fname
 
     surrogate_fname = os.path.join(args.data_dir, args.surrogate_fname)
     output_fpath = os.path.join(args.data_dir, sweep_fname)
 
     df = {key: [] for key in config.PARAM_SWEEP_KEYS}
+
+    if args.compute_surrogate_error:
+        surrogate_error = {"X": [], "P": [], "surrogate-error": []}
 
     """
     The optimization problem to solve is the following:
@@ -134,6 +145,25 @@ def main():
                 for key in config.PARAM_SWEEP_KEYS:
                     if key not in ("X", "P", "Termination"):
                         df[key].append(INVALID)
+
+            # Regardless of whether the solve was successful, if we didn't encounter
+            # an error, attempt to compute the surrogate error at the point of
+            # termination.
+            if args.compute_surrogate_error:
+                # Computing this surrogate error involves two simulations. What
+                # if either fails?
+                surrogate_error["X"].append(X)
+                surrogate_error["P"].append(P)
+                try:
+                    surr_err = compute_surrogate_error(m)
+                    # Maximum relative error, defined as:
+                    # |a - b| / max(|a|, |b|, 1)
+                    max_surr_err = max(surr_err.values())
+                    surrogate_error["surrogate-error"].append(max_surr_err)
+                except ValueError:
+                    # We failed to simulate either the full-space or surrogate
+                    # reactor model.
+                    surrogate_error["surrogate-error"].append(None)
         
         except ValueError:
             df[list(df.keys())[0]].append(X)
@@ -145,8 +175,31 @@ def main():
                 if key not in ("X", "P", "Termination"):
                     df[key].append(INVALID)
 
+            if args.compute_surrogate_error:
+                # If we encountered an error, do not attempt to compute surrogate
+                # error. A solution has not been loaded, so the value we would
+                # get has nothing to do with the formulation or parameter values.
+                surrogate_error["X"].append(X)
+                surrogate_error["P"].append(P)
+                surrogate_error["surrogate-error"].append(INVALID)
+
     df = pd.DataFrame(df)
     df.to_csv(output_fpath)
+
+    if args.compute_surrogate_error:
+        surrogate_error_df = pd.DataFrame(surrogate_error)
+
+        # TODO: Allow specification of a file for surrogate error
+        sweep_basename = sweep_fname
+        if "." in sweep_basename:
+            experiment_extension = "." + sweep_basename.split(".")[-1]
+            name = sweep_basename[:-len(experiment_extension)]
+            error_fname = name + "-surrogate-error" + experiment_extension
+        else:
+            error_fname = sweep_basename + "-surrogate-error"
+        error_fpath = os.path.join(args.data_dir, error_fname)
+
+        surrogate_error_df.to_csv(error_fpath)
 
 if __name__ == "__main__":
     main()

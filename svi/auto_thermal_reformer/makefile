@@ -3,7 +3,7 @@ SUBSET = "0,2,4,6,7,8,14,18,21,24,25,26,27,30,32,35,36,37,38,39,41,42,44,45,47"
 train:
 	python generate_training_data.py --regular-samples
 	python generate_alamo_surrogate.py data/training-data.csv
-	python nn_tuning_training.py data/training-data.csv
+	python nn_tuning_training.py data/training-data.csv --tune
 
 sweep:
 	python run_fullspace_sweep.py
@@ -62,3 +62,27 @@ plot:
 	    --validation-fpath=data/implicit-sweep-validation.csv \
 	    --feastol=1e-5 \
 	    --title="Implicit function"
+
+plot-error:
+	python plot_surrogate_error.py \
+		data/alamo-sweep-surrogate-error.csv \
+		--no-legend \
+		--opaque \
+		--title="ALAMO"
+	python plot_surrogate_error.py \
+		data/nn-sweep-full-surrogate-error.csv \
+		--opaque \
+		--title="Neural network"
+
+plot-error-png:
+	python plot_surrogate_error.py \
+		data/alamo-sweep-surrogate-error.csv \
+		--no-legend \
+		--opaque \
+		--title="ALAMO" \
+		--plot-fname=alamo-sweep-surrogate-error.png
+	python plot_surrogate_error.py \
+		data/nn-sweep-full-surrogate-error.csv \
+		--opaque \
+		--title="Neural network" \
+		--plot-fname=nn-sweep-full-surrogate-error.png
