@@ -41,6 +41,10 @@ class TimedCyIpoptNLP(CyIpoptNLP):
             timer = HierarchicalTimer()
         self._timer = timer
 
+        # We want this to be true so we can use 13argcallback below, but we can't
+        # use Pyomo v6.8.0 because of a version incompatibility with IDAES v2.4.
+        self._use_13arg_callback = True
+
         super().__init__(nlp, **kwds)
 
     def solve(self, x, lagrange=None, zl=None, zu=None):
@@ -300,9 +304,7 @@ class Callback:
     def __call__(
         self,
         nlp,
-        # Don't include this argument, for compatibility with current CyIpopt
-        # interface
-        #ipopt_problem,
+        ipopt_problem,
         alg_mod,
         iter_count,
         obj_value,
@@ -340,9 +342,7 @@ class ConditioningCallback:
     def __call__(
         self,
         nlp,
-        # Don't include this argument, for compatibility with current CyIpopt
-        # interface
-        #ipopt_problem,
+        ipopt_problem,
         alg_mod,
         iter_count,
         obj_value,
@@ -532,7 +532,7 @@ class FullStateCallback:
             square_jac = sparse.coo_matrix((data, (row, col)), shape=(len(con_coords), len(var_coords)))
             # Row and column blocks
             rblocks, cblocks = block_triangularize(square_jac)
-            
+
             if self.block_condition_numbers is None:
                 self.block_condition_numbers = {
                     f"block-{i}-cond": []
