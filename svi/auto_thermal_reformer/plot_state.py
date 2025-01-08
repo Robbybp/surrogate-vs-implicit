@@ -1,0 +1,224 @@
+#  ___________________________________________________________________________
+#
+#  Surrogate vs. Implicit: Experiments comparing nonlinear optimization
+#  formulations
+#
+#  Copyright (c) 2023. Triad National Security, LLC. All rights reserved.
+#
+#  This program was produced under U.S. Government contract 89233218CNA000001
+#  for Los Alamos National Laboratory (LANL), which is operated by Triad
+#  National Security, LLC for the U.S. Department of Energy/National Nuclear
+#  Security Administration. All rights in the program are reserved by Triad
+#  National Security, LLC, and the U.S. Department of Energy/National Nuclear
+#  Security Administration. The Government is granted for itself and others
+#  acting on its behalf a nonexclusive, paid-up, irrevocable worldwide license
+#  in this material to reproduce, prepare derivative works, distribute copies
+#  to the public, perform publicly and display publicly, and to permit others
+#  to do so.
+#
+#  This software is distributed under the 3-clause BSD license.
+#  ___________________________________________________________________________
+
+import os
+import svi.auto_thermal_reformer.config as config
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+"""Script for plotting comparisons of state trajectories between different methods
+"""
+
+
+LABEL_LOOKUP = {
+    "inf_pr": "Primal infeasibility",
+    "inf_du": "Dual infeasibility",
+    "fs.reformer_bypass.split_fraction[0.0,bypass_outlet]": "Split fraction",
+    "fs.reformer_mix.steam_inlet_state[0.0].flow_mol": "Steam inlet",
+    "fs.feed.properties[0.0].flow_mol": "Natural gas inlet",
+}
+
+KEY_LOOKUP = {
+    # These are names that we can use in the CLI instead of writing out the keys
+    "split-fraction": "fs.reformer_bypass.split_fraction[0.0,bypass_outlet]",
+    "steam-inlet": "fs.reformer_mix.steam_inlet_state[0.0].flow_mol",
+    "methane-inlet": "fs.feed.properties[0.0].flow_mol",
+}
+
+
+plt.rcParams["font.size"] = 16
+
+
+def get_label(fpath):
+    fname = os.path.basename(fpath)
+    if "nn-full" in fname:
+        return "Full-space NN"
+    elif "nn-reduced" in fname:
+        return "Reduced-space NN"
+    elif "fullspace" in fname:
+        return "Full-space"
+    elif "implicit" in fname:
+        return "Implicit"
+    elif "alamo" in fname:
+        return "ALAMO"
+    else:
+        raise NotImplementedError(f"Filepath {fpath} could not be recognized")
+
+
+def plot_trajectory(
+    df,
+    keys,
+    # Overrides default labels so we can label trajectories by file rather than by key
+    labels=None,
+    fig_ax=None,
+    logscale=False,
+):
+    fig, ax = plt.subplots() if fig_ax is None else fig_ax
+
+    iterations = list(range(len(df)))
+
+    if labels is None:
+        labels = [LABEL_LOOKUP.get(key, key) for key in keys]
+
+    for i, key in enumerate(keys):
+        label = labels[i]
+        ax.plot(
+            iterations,
+            list(df[key]),
+            label=label,
+            linewidth=2,
+        )
+    ax.legend()
+    if logscale:
+        ax.set_yscale("log")
+    ax.xaxis.set_tick_params(length=0)
+    ax.yaxis.set_tick_params(length=0)
+    ax.set_xlabel("Iteration number")
+    return fig, ax
+
+
+def plot_2d_state(
+    df,
+    state1,
+    state2,
+    fig_ax=None,
+    label=None,
+    state1label=None,
+    state2label=None,
+    # Include initial and final points
+    include_points=True,
+):
+    fig, ax = plt.subplots() if fig_ax is None else fig_ax
+    state1label = LABEL_LOOKUP.get(state1, state1) if state1label is None else state1label
+    state2label = LABEL_LOOKUP.get(state2, state2) if state2label is None else state2label
+
+    xdata = list(df[state1])
+    ydata = list(df[state2])
+    ax.plot(
+        xdata,
+        ydata,
+        label=label,
+    )
+    ax.set_xlabel(state1label)
+    ax.set_ylabel(state2label)
+
+    ax.legend()
+    return fig, ax
+
+
+def plot_points(
+    df,
+    state1,
+    state2,
+    fig_ax=None,
+    include_final=True,
+):
+    fig, ax = plt.subplots() if fig_ax is None else fig_ax
+    xdata = list(df[state1])
+    ydata = list(df[state2])
+    initx = xdata[0]
+    inity = ydata[0]
+    finalx = xdata[-1]
+    finaly = ydata[-1]
+    ax.scatter(
+        [initx],
+        [inity],
+        marker='.',
+        s=100,
+        label="Initial",
+        color="black",
+        # Sufficiently high zorder that we put points on top of lines 
+        zorder=10,
+    )
+    ax.scatter(
+        [finalx],
+        [finaly],
+        marker='*',
+        s=100,
+        label="Optimal",
+        color="black",
+        zorder=10,
+    )
+    ax.legend()
+    return fig, ax
+
+
+def main(args):
+    fpaths = args.fpaths.split(",")
+    dfs = [pd.read_csv(fpath) for fpath in fpaths]
+
+    # TODO: Handle multiple keys in a trajectory plot?
+    keys = [args.state]
+    # Get keys if any shorthands were used
+    keys = [KEY_LOOKUP.get(key, key) for key in keys]
+    fig, ax = plt.subplots()
+    if args.state2 is None:
+        for i, df in enumerate(dfs):
+            label = get_label(fpaths[i])
+            # I know that we're only plotting one key
+            labels = [label]
+            plot_trajectory(df, keys, labels=labels, fig_ax=(fig, ax))
+    else:
+        for i, df in enumerate(dfs):
+            label = get_label(fpaths[i])
+            state2 = KEY_LOOKUP.get(args.state2, args.state2)
+            plot_2d_state(
+                df,
+                keys[0],
+                state2,
+                fig_ax=(fig, ax),
+                label=label,
+            )
+        plot_points(
+            dfs[0],
+            keys[0],
+            state2,
+            fig_ax=(fig, ax),
+        )
+
+    fig.tight_layout()
+
+    if args.show:
+        plt.show()
+
+    if not args.no_save:
+        # Assume file name is NAME.ext
+        #name = os.path.basename(args.fpaths).split(".")[0]
+        #fname = name + "-pdinfeas.pdf"
+        #fpath = os.path.join(args.results_dir, fname)
+        #fig.savefig(fpath, transparent=not args.opaque)
+        pass
+
+
+if __name__ == "__main__":
+    argparser = config.get_plot_argparser()
+
+    # TODO: Get fpaths
+    argparser.add_argument(
+        "fpaths",
+        help="Comma-separated list of files containing states to plot",
+    )
+    argparser.add_argument("state", help="State to plot. This can be anything we track, e.g. 'obj_value'")
+    argparser.add_argument("--state2", help="Optional second state to plot", default=None)
+
+    args = argparser.parse_args()
+    main(args)
