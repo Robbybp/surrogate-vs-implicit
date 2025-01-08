@@ -86,7 +86,10 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--model",
         default="fullspace",
-        help="Options are 'fullspace', 'implcit', 'alamo', or 'nn-full'. Default is 'fullspace'.",
+        help=(
+            "Options are 'fullspace', 'implcit', 'alamo', 'nn-full', or 'nn-reduced'."
+            + " Default is 'fullspace'."
+        ),
     )
     argparser.add_argument(
         "--fname",
