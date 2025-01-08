@@ -24,6 +24,7 @@ import itertools
 import pyomo.environ as pyo
 from svi.cyipopt import TimedPyomoCyIpoptSolver, Callback
 from svi.external import add_external_function_libraries_to_environment
+from idaes.core.surrogate.keras_surrogate import KerasSurrogate
 
 
 """Consistent-signature callbacks to construct each model
@@ -62,8 +63,30 @@ def nn_full_constructor(X, P, **kwds):
         initialize_nn_atr_flowsheet,
     )
     surrogate_fname = kwds.pop("surrogate_fname", None)
-    # Note that KerasSurrogate.Formulation.FULL_SPACE is the default
-    m = create_nn_instance(X, P, surrogate_fname=surrogate_fname)
+    m = create_nn_instance(
+        X,
+        P,
+        surrogate_fname=surrogate_fname,
+        formulation=KerasSurrogate.Formulation.FULL_SPACE,
+    )
+    initialize_nn_atr_flowsheet(m)
+    m.fs.reformer_bypass.inlet.temperature.unfix()
+    m.fs.reformer_bypass.inlet.flow_mol.unfix()
+    return m
+
+
+def nn_reduced_constructor(X, P, **kwds):
+    from svi.auto_thermal_reformer.nn_flowsheet import (
+        create_instance as create_nn_instance,
+        initialize_nn_atr_flowsheet,
+    )
+    surrogate_fname = kwds.pop("surrogate_fname", None)
+    m = create_nn_instance(
+        X,
+        P,
+        surrogate_fname=surrogate_fname,
+        formulation=KerasSurrogate.Formulation.REDUCED_SPACE,
+    )
     initialize_nn_atr_flowsheet(m)
     m.fs.reformer_bypass.inlet.temperature.unfix()
     m.fs.reformer_bypass.inlet.flow_mol.unfix()
@@ -103,6 +126,7 @@ CONSTRUCTOR_LOOKUP = {
     "implicit": implicit_constructor,
     "alamo": alamo_constructor,
     "nn-full": nn_full_constructor,
+    "nn-reduced": nn_reduced_constructor,
 }
 
 def get_optimization_solver(options=None, iters=300, callback=None):
