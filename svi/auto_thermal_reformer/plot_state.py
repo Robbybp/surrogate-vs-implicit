@@ -23,6 +23,8 @@ import os
 import svi.auto_thermal_reformer.config as config
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+import numpy as np
 
 
 """Script for plotting comparisons of state trajectories between different methods
@@ -125,6 +127,14 @@ def plot_2d_state(
     return fig, ax
 
 
+def get_opt_xy(df, state1, state2):
+    xdata = list(df[state1])
+    ydata = list(df[state2])
+    finalx = xdata[-1]
+    finaly = ydata[-1]
+    return (finalx, finaly)
+
+
 def plot_points(
     df,
     state1,
@@ -162,6 +172,35 @@ def plot_points(
     return fig, ax
 
 
+def plot_contours(
+    rh,
+    center=(0.0, 0.0),
+    fig_ax=None,
+    levels=None,
+):
+    fig, ax = plt.subplots() if fig_ax is None else fig_ax
+    #levels = [1.0, 2.0, 3.0] if levels is None else levels
+    levels = [10.0] if levels is None else levels
+    evals, evecs = np.linalg.eig(rh)
+    # TODO: Make sure RH is 2x2?
+    if not np.all(evals > 0):
+        raise ValueError("Reduced hessian is not positive definite")
+    for l in levels:
+        width = 2 * evals[0] * l
+        height = 2 * evals[1] * l
+        angle = np.rad2deg(np.arctan2(*evecs[1]))
+        ellipse = Ellipse(
+            center,
+            width=width,
+            height=height,
+            angle=angle,
+            edgecolor="gray",
+            facecolor=None,
+        )
+        ellipse.set_angle()
+        ax.add_patch(ellipse)
+
+
 def main(args):
     fpaths = args.fpaths.split(",")
     dfs = [pd.read_csv(fpath) for fpath in fpaths]
@@ -188,12 +227,18 @@ def main(args):
                 fig_ax=(fig, ax),
                 label=label,
             )
+        center = get_opt_xy(dfs[0], keys[0], state2)
         plot_points(
             dfs[0],
             keys[0],
             state2,
             fig_ax=(fig, ax),
         )
+        #plot_contours(
+        #    np.identity(2),
+        #    center=center,
+        #    fig_ax=(fig, ax),
+        #)
 
     fig.tight_layout()
 

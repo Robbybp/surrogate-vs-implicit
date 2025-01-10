@@ -23,6 +23,8 @@ import os
 import svi.auto_thermal_reformer.config as config
 from svi.cyipopt import FullStateCallback
 import pandas as pd
+import numpy as np
+import pyomo.environ as pyo
 
 
 def main(args):
@@ -33,6 +35,8 @@ def main(args):
         xp_samples = config.get_parameter_samples(args)
         conversion, pressure = xp_samples[args.sample]
     m = config.CONSTRUCTOR_LOOKUP[args.model](conversion, pressure)
+    m.ipopt_zL_out = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    m.ipopt_zU_out = pyo.Suffix(direction=pyo.Suffix.IMPORT)
 
     dof_varnames = [
         "fs.reformer_bypass.split_fraction[0.0,bypass_outlet]",
@@ -46,7 +50,8 @@ def main(args):
     )
     solver = config.get_optimization_solver(callback=callback)
 
-    results = solver.solve(m, tee=True)
+    solver.config.return_nlp = True
+    results, nlp = solver.solve(m, tee=True)
 
     if args.fname is None:
         fname = f"{args.model}-iterates"
@@ -78,6 +83,24 @@ def main(args):
         df.to_csv(fpath)
     else:
         print("--no-save is set. Not saving iterate data")
+
+    dof_vars = [m.find_component(v) for v in dof_varnames]
+    from pyomo.common.collections import ComponentSet
+    dofvarset = ComponentSet(dof_vars)
+    othervars = [var for var in nlp.get_pyomo_variables() if var not in dofvarset]
+    var_order = dof_vars + othervars
+
+    from svi.nlp import project_onto, get_reduced_hessian, get_gradient_of_lagrangian
+    reorder_lbmult = [m.ipopt_zL_out[v] for v in var_order]
+    reorder_ubmult = [m.ipopt_zU_out[v] for v in var_order]
+    lbmult = [m.ipopt_zL_out[v] for v in nlp.get_pyomo_variables()]
+    ubmult = [m.ipopt_zU_out[v] for v in nlp.get_pyomo_variables()]
+    grad_lag = get_gradient_of_lagrangian(nlp, lbmult, ubmult)
+
+    rh = get_reduced_hessian(nlp, dof_vars, lbmult, ubmult)
+    proj_hess = project_onto(rh, [0, 2])
+    eigenvalues, eigenvectors = np.linalg.eig(proj_hess)
+    print(f"Eigenvalues of projected Hessian: {eigenvalues}")
 
 
 if __name__ == "__main__":

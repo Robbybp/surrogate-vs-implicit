@@ -17,6 +17,7 @@ from pyomo.opt.results.solution import Solution
 import numpy as np
 from scipy import sparse
 from pyomo.contrib.incidence_analysis.triangularize import block_triangularize
+from svi.nlp import get_gradient_of_lagrangian
 
 pyomo_nlp = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_nlp")[0]
 pyomo_grey_box = attempt_import("pyomo.contrib.pynumero.interfaces.pyomo_grey_box_nlp")[
@@ -543,30 +544,3 @@ class FullStateCallback:
                     submat = extract_submatrix(square_jac, rb, cb)
                     cond = np.linalg.cond(submat.toarray())
                     self.block_condition_numbers[f"block-{i}-cond"].append(cond)
-
-
-def get_gradient_of_lagrangian(
-    nlp,
-    primal_lb_multipliers,
-    primal_ub_multipliers,
-):
-    # PyNumero NLPs contain constraint multipliers, but does not define a convention.
-    # We still need:
-    # - primal LB/UB multipliers
-    # We should not need slack multipliers (Ipopt should take care of this...)
-    grad_obj = nlp.evaluate_grad_objective()
-
-    # There is no way this works. We will probably need to separate equality and
-    # inequality multipliers.
-    jac = nlp.evaluate_jacobian()
-    duals = nlp.get_duals()
-    # Each constraint gradient times its multiplier
-    conjac_term = jac.transpose().dot(duals)
-
-    grad_lag = (
-        - grad_obj
-        - conjac_term
-        + primal_lb_multipliers
-        - primal_ub_multipliers
-    )
-    return grad_lag
