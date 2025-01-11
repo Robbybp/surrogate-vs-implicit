@@ -98,9 +98,17 @@ def main(args):
     grad_lag = get_gradient_of_lagrangian(nlp, lbmult, ubmult)
 
     rh = get_reduced_hessian(nlp, dof_vars, lbmult, ubmult)
-    proj_hess = project_onto(rh, [0, 2])
-    eigenvalues, eigenvectors = np.linalg.eig(proj_hess)
-    print(f"Eigenvalues of projected Hessian: {eigenvalues}")
+    eigenvalues, eigenvectors = np.linalg.eig(rh)
+    print(f"Eigenvalues of reduced Hessian: {eigenvalues}")
+    sample_suff = "" if args.sample is None else f"-{args.sample}"
+    rh_fname = f"{args.model}-rh{sample_suff}.npy"
+    rh_fpath = os.path.join(args.data_dir, rh_fname)
+    if args.no_save:
+        print(f"--no-save set. Not saving reduced hessian. Would have saved to {rh_fname}")
+    else:
+        np.save(rh_fpath, rh)
+    #proj_hess = project_onto(rh, [0, 1])
+    #eigenvalues, eigenvectors = np.linalg.eig(proj_hess)
 
 
 if __name__ == "__main__":

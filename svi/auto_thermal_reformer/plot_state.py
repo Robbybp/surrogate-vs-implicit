@@ -21,6 +21,7 @@
 
 import os
 import svi.auto_thermal_reformer.config as config
+from svi.nlp import project_onto
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -46,8 +47,15 @@ KEY_LOOKUP = {
     "methane-inlet": "fs.feed.properties[0.0].flow_mol",
 }
 
+INDEX_LOOKUP = {
+    "fs.reformer_bypass.split_fraction[0.0,bypass_outlet]": 0,
+    "fs.reformer_mix.steam_inlet_state[0.0].flow_mol": 1,
+    "fs.feed.properties[0.0].flow_mol": 2,
+}
 
-plt.rcParams["font.size"] = 16
+
+plt.rcParams["font.size"] = 12
+plt.rcParams["font.family"] = "serif"
 
 
 def get_label(fpath):
@@ -180,24 +188,23 @@ def plot_contours(
 ):
     fig, ax = plt.subplots() if fig_ax is None else fig_ax
     #levels = [1.0, 2.0, 3.0] if levels is None else levels
-    levels = [10.0] if levels is None else levels
+    levels = [1.0] if levels is None else levels
     evals, evecs = np.linalg.eig(rh)
     # TODO: Make sure RH is 2x2?
     if not np.all(evals > 0):
         raise ValueError("Reduced hessian is not positive definite")
     for l in levels:
-        width = 2 * evals[0] * l
-        height = 2 * evals[1] * l
+        width = 2 * (l / evals[0])**0.5
+        height = 2 * (l / evals[1])**0.5
         angle = np.rad2deg(np.arctan2(*evecs[1]))
         ellipse = Ellipse(
             center,
             width=width,
             height=height,
             angle=angle,
-            edgecolor="gray",
-            facecolor=None,
+            edgecolor=tuple([0.7]*3),
+            facecolor="none",
         )
-        ellipse.set_angle()
         ax.add_patch(ellipse)
 
 
@@ -216,6 +223,7 @@ def main(args):
             # I know that we're only plotting one key
             labels = [label]
             plot_trajectory(df, keys, labels=labels, fig_ax=(fig, ax))
+        output_fname = "state-trajectory.pdf" if args.output_fname is None else args.output_fname
     else:
         for i, df in enumerate(dfs):
             label = get_label(fpaths[i])
@@ -227,18 +235,29 @@ def main(args):
                 fig_ax=(fig, ax),
                 label=label,
             )
-        center = get_opt_xy(dfs[0], keys[0], state2)
+        # We plot the successful trajectory second
         plot_points(
-            dfs[0],
+            dfs[1],
             keys[0],
             state2,
             fig_ax=(fig, ax),
         )
-        #plot_contours(
-        #    np.identity(2),
-        #    center=center,
-        #    fig_ax=(fig, ax),
-        #)
+        output_fname = "state.pdf" if args.output_fname is None else args.output_fname
+        if args.rh is not None:
+            coords = (INDEX_LOOKUP[keys[0]], INDEX_LOOKUP[state2])
+            rh = np.load(args.rh)
+            proj_rh = project_onto(rh, coords)
+            levels = [0.00625, 0.0125, 0.025, 0.05, 0.1, 0.2]
+            center = get_opt_xy(dfs[1], keys[0], state2)
+            plot_contours(
+                proj_rh,
+                center=center,
+                fig_ax=(fig, ax),
+                levels=levels,
+            )
+            #ax.set_xlim(0.0, 0.6)
+            #ax.set_ylim(1000, 1400)
+            ax.legend(loc="upper left")
 
     fig.tight_layout()
 
@@ -247,11 +266,8 @@ def main(args):
 
     if not args.no_save:
         # Assume file name is NAME.ext
-        #name = os.path.basename(args.fpaths).split(".")[0]
-        #fname = name + "-pdinfeas.pdf"
-        #fpath = os.path.join(args.results_dir, fname)
-        #fig.savefig(fpath, transparent=not args.opaque)
-        pass
+        output_fpath = os.path.join(args.results_dir, output_fname)
+        fig.savefig(output_fpath, transparent=not args.opaque)
 
 
 if __name__ == "__main__":
@@ -264,6 +280,8 @@ if __name__ == "__main__":
     )
     argparser.add_argument("state", help="State to plot. This can be anything we track, e.g. 'obj_value'")
     argparser.add_argument("--state2", help="Optional second state to plot", default=None)
+    argparser.add_argument("--rh", default=None, help=".npy file containing reduced hessian")
+    argparser.add_argument("--output-fname", default=None)
 
     args = argparser.parse_args()
     main(args)
