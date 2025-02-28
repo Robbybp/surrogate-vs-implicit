@@ -86,3 +86,9 @@ plot-error-png:
 		--opaque \
 		--title="Neural network" \
 		--plot-fname=nn-sweep-full-surrogate-error.png
+
+plot-nn-state15:
+	python plot_state.py data-202405/nn-reduced-iterates-15.csv,data-202405/nn-full-iterates-15.csv split-fraction --state2=methane-inlet --rh=data-202405/nn-full-rh-15.npy --output-fname=nn-states-15.pdf
+
+plot-nn-state14:
+	python plot_state.py data-202405/nn-reduced-iterates-14.csv,data-202405/nn-full-iterates-14.csv split-fraction --state2=methane-inlet --rh=data-202405/nn-full-rh-14.npy --output-fname=nn-states-14.pdf
