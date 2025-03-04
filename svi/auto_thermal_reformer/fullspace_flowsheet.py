@@ -70,6 +70,7 @@ from pyomo.contrib.pynumero.interfaces.pyomo_nlp import PyomoNLP
 
 from svi.external import add_external_function_libraries_to_environment
 from svi.auto_thermal_reformer.reactor_model import add_reactor_model
+import svi.auto_thermal_reformer.config as config
 
 import argparse
 
@@ -383,6 +384,7 @@ def add_obj_and_constraints(m):
     ####### OBJECTIVE IS TO MAXIMIZE H2 COMPOSITION IN PRODUCT STREAM #######
     m.fs.obj = pyo.Objective(
         expr=m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.maximize
+        #expr=-m.fs.product.mole_frac_comp[0, "H2"], sense=pyo.minimize
     )
 
     # MINIMUM PRODUCT FLOW OF 3500 mol/s IN PRODUCT STREAM
@@ -465,10 +467,15 @@ if __name__ == "__main__":
 
     simulate = not args.optimize
     if args.optimize:
-        P = 1600000.0
+        P = 1500000.0
         X = 0.95
         m = make_optimization_model(X, P, initialize=True)
-        res = pyo.SolverFactory("ipopt").solve(m, tee=True)
+        m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT_EXPORT)
+        m.ipopt_zL_out = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+        m.ipopt_zU_out = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+
+        solver = config.get_optimization_solver()
+        res = solver.solve(m, tee=True)
 
     elif simulate:
         P = 1600000.0
